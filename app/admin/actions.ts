@@ -9,6 +9,14 @@ import { importReferenceTaxonomyToDb } from "@/lib/pipeline/taxonomy-import";
 
 type ActionResult = { ok: boolean; message: string };
 
+function revalidateSeoPaths() {
+  revalidatePath("/sitemap.xml");
+  revalidatePath("/sitemaps/categories.xml");
+  revalidatePath("/sitemaps/articles.xml");
+  revalidatePath("/sitemaps/images.xml");
+  revalidatePath("/sitemap-html");
+}
+
 async function withGuard(callback: () => Promise<void>): Promise<ActionResult> {
   try {
     await callback();
@@ -36,6 +44,7 @@ export async function createCategoryAction(formData: FormData): Promise<void> {
     });
     revalidatePath("/");
     revalidatePath("/admin/categories");
+    revalidateSeoPaths();
   });
 }
 
@@ -45,6 +54,7 @@ export async function importReferenceTaxonomyAction(): Promise<void> {
     revalidatePath("/admin/categories");
     revalidatePath("/admin/pipeline");
     revalidatePath("/");
+    revalidateSeoPaths();
   });
 }
 
@@ -63,6 +73,7 @@ export async function updateCategoryAction(formData: FormData): Promise<void> {
     });
     revalidatePath("/admin/categories");
     revalidatePath("/");
+    revalidateSeoPaths();
   });
 }
 
@@ -92,6 +103,7 @@ export async function deleteCategoryAction(formData: FormData): Promise<void> {
 
     revalidatePath("/admin/categories");
     revalidatePath("/");
+    revalidateSeoPaths();
   });
 }
 
