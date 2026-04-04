@@ -1,6 +1,8 @@
 ﻿import "server-only";
 
 import { cache } from "react";
+import fs from "node:fs";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { absoluteUrl } from "@/lib/utils";
 import {
@@ -114,6 +116,14 @@ function buildSeedImage(seed: string) {
   return `https://picsum.photos/seed/${encodeURIComponent(safe || "malooma")}/1600/900`;
 }
 
+function resolveHeroImage(slug: string, heroUrl?: string | null) {
+  if (!heroUrl) return buildSeedImage(slug);
+  if (!heroUrl.startsWith("/")) return heroUrl;
+
+  const localPath = path.join(process.cwd(), "public", heroUrl.replace(/^\//, ""));
+  return fs.existsSync(localPath) ? heroUrl : buildSeedImage(slug);
+}
+
 function paginate<T>(items: T[], page: number, pageSize = PAGE_SIZE) {
   const safePage = Math.max(1, page);
   const start = (safePage - 1) * pageSize;
@@ -149,7 +159,7 @@ function toCardFromDbArticle(article: {
     subcategorySlug: article.category.slug,
     publishedAt: (article.publishedAt ?? article.createdAt).toISOString(),
     readingMinutes: article.readingMinutes,
-    heroImage: article.heroMedia?.url ?? buildSeedImage(article.slug),
+    heroImage: resolveHeroImage(article.slug, article.heroMedia?.url),
     author: {
       id: article.author.id,
       slug: article.author.slug,
@@ -629,7 +639,7 @@ export const contentRepository = {
               subcategorySlug: related.category.slug,
               publishedAt: (related.publishedAt ?? related.createdAt).toISOString(),
               readingMinutes: related.readingMinutes,
-              heroImage: related.heroMedia?.url ?? buildSeedImage(related.slug),
+              heroImage: resolveHeroImage(related.slug, related.heroMedia?.url),
               author: {
                 id: related.author.id,
                 slug: related.author.slug,
@@ -651,7 +661,7 @@ export const contentRepository = {
             publishedAt: (dbArticle.publishedAt ?? dbArticle.createdAt).toISOString(),
             updatedAt: dbArticle.updatedAt.toISOString(),
             readingMinutes: dbArticle.readingMinutes,
-            heroImage: dbArticle.heroMedia?.url ?? buildSeedImage(dbArticle.slug),
+            heroImage: resolveHeroImage(dbArticle.slug, dbArticle.heroMedia?.url),
             author: {
               id: dbArticle.author.id,
               slug: dbArticle.author.slug,
@@ -768,4 +778,5 @@ export const contentRepository = {
     }
   }),
 };
+
 
