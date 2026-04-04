@@ -16,7 +16,12 @@ async function main() {
   });
 
   const report = await processTopicsToDrafts(1);
-  const article = await prisma.article.findFirst({ where: { topicId: topic.id } });
+  let article = await prisma.article.findFirst({ where: { topicId: topic.id } });
+
+  if (!article && report.results.length > 0) {
+    const fallbackId = report.results[0].articleId;
+    article = await prisma.article.findUnique({ where: { id: fallbackId } });
+  }
 
   if (!article) {
     console.log("No article generated from topic", report);
