@@ -20,23 +20,23 @@ const CATEGORY_HINTS: Record<string, string[]> = {
 
 async function ensureBaseMainCategories() {
   const baseNames = Object.keys(CATEGORY_HINTS);
-  const existing = await prisma.category.findMany({
-    where: { level: 1 },
-    select: { slug: true },
-  });
-  const existingSlugs = new Set(existing.map((item) => item.slug));
-
   for (const [index, name] of baseNames.entries()) {
     const slug = slugifyArabic(name);
-    if (existingSlugs.has(slug)) continue;
-
-    await prisma.category.create({
-      data: {
+    await prisma.category.upsert({
+      where: { slug },
+      create: {
         name,
         slug,
         level: 1,
         sortOrder: index,
         description: `قسم رئيسي تلقائي: ${name}`,
+        isActive: true,
+      },
+      update: {
+        name,
+        level: 1,
+        sortOrder: index,
+        isActive: true,
       },
     });
   }
