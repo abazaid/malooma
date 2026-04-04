@@ -88,7 +88,7 @@ async function processSingleTopic(topicId: string, runKey?: string) {
   let aiMetaDescription = "";
   let aiInternalLinkSuggestions: { anchor: string; targetTopic: string }[] = [];
 
-  if (process.env.OPENAI_API_KEY) {
+  if (process.env.LLM_BASE_URL || process.env.OPENAI_API_KEY) {
     const aiPackage = await generateArticlePackageWithAI({
       topic: topic.rawTitle,
       mainCategory: mainCategory.name,
@@ -288,36 +288,19 @@ async function processSingleTopic(topicId: string, runKey?: string) {
     },
   });
 
-  const generatedCover = await generateCoverImage({
-    slug: article.slug,
-    prompt: imagePrompt.prompt,
-    fallbackSeed: slugifyArabic(`${mainCategory.name}-${article.slug}`),
-  });
-
-  const media = await prisma.media.create({
-    data: {
-      fileName: generatedCover.fileName,
-      mimeType: generatedCover.mimeType,
-      storageKey: generatedCover.storageKey,
-      url: generatedCover.url,
-      altText: article.title,
-    },
-  });
-
   await prisma.article.update({
     where: { id: article.id },
     data: {
       imagePrompt: imagePrompt.prompt,
-      heroMediaId: media.id,
     },
   });
   await logPipelineEvent({
-    stage: "ARTICLE_COVER_ATTACHED",
+    stage: "IMAGE_PROMPT_READY",
     status: "SUCCESS",
     runKey,
     topicId: topic.id,
     articleId: article.id,
-    message: generatedCover.url,
+    message: "Image prompt queued for async generation",
   });
 
   const relatedCount = await attachInternalLinks({
@@ -685,6 +668,64 @@ export async function publishDueArticles(limit = 5, runKey?: string) {
   });
 
   return { published };
+}
+
+export async function processPendingImages(limit = 5, runKey?: string) {
+  const queue = await prisma.generatedImagePrompt.findMany({
+    where: {
+      article: {
+        heroMediaId: null,
+      },
+    },
+    orderBy: { createdAt: "asc" },
+    take: Math.min(10, Math.max(1, limit)),
+    include: {
+      article: {
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          category: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  let generated = 0;
+  for (const item of queue) {
+    const cover = await generateCoverImage({
+      slug: item.article.slug,
+      prompt: item.prompt,
+      fallbackSeed: slugifyArabic(`${item.article.category.name}-${item.article.slug}`),
+    });
+
+    const media = await prisma.media.create({
+      data: {
+        fileName: cover.fileName,
+        mimeType: cover.mimeType,
+        storageKey: cover.storageKey,
+        url: cover.url,
+        altText: item.article.title,
+      },
+    });
+
+    await prisma.article.update({
+      where: { id: item.article.id },
+      data: { heroMediaId: media.id },
+    });
+
+    await logPipelineEvent({
+      stage: "ARTICLE_COVER_ATTACHED",
+      status: "SUCCESS",
+      runKey,
+      articleId: item.article.id,
+      message: cover.url,
+    });
+
+    generated += 1;
+  }
+
+  return { generated };
 }
 
 export async function runContentPipeline(input?: {

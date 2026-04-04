@@ -11,6 +11,11 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().optional(),
   OPENAI_IMAGE_MODEL: z.string().optional(),
+  OPENAI_IMAGE_API_KEY: z.string().optional(),
+  LLM_BASE_URL: z.string().optional(),
+  LLM_API_KEY: z.string().optional(),
+  LLM_MODEL_LIGHT: z.string().optional(),
+  LLM_MODEL_WRITER: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

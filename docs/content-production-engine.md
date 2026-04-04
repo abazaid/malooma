@@ -20,7 +20,7 @@
 - FAQ + key points + conclusion
 
 5. **Article Writer**
-- إنتاج مقال عربي أصلي بتركيب طويل (1200+ كلمة)
+- إنتاج مقال عربي أصلي بتركيب 800-1500 كلمة
 - مقدمة + أقسام + نقاط + FAQ + خاتمة
 
 6. **SEO Optimization Engine**
@@ -39,7 +39,12 @@
 
 8. **Image Prompt Generator**
 - prompt + negative prompt
-- تخزين في `GeneratedImagePrompt` + `Article.imagePrompt`
+- تخزين في `GeneratedImagePrompt` + `Article.imagePrompt` (بدون انتظار توليد الصورة)
+
+9. **Async Image Worker**
+- يقرأ prompts المعلقة
+- يولد الصورة عبر `gpt-image-1`
+- يربط الصورة بالمقال لاحقًا دون تعطيل الكتابة/النشر
 
 9. **Publishing Scheduler**
 - جدولة 5 مقالات يوميًا فقط (Cluster واحد)
@@ -66,6 +71,7 @@
 ## Commands
 - `npm run pipeline:run`
 - `npm run pipeline:publish`
+- `npm run pipeline:images`
 - `npm run pipeline:article -- "عنوان"`
 - `npm run pipeline:cron`
 

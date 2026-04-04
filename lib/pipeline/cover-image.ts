@@ -26,10 +26,11 @@ function buildFallbackCover(seed: string) {
 }
 
 export async function generateCoverImage(input: CoverInput): Promise<CoverOutput> {
-  if (!env.OPENAI_API_KEY) return buildFallbackCover(input.fallbackSeed);
+  const imageApiKey = env.OPENAI_IMAGE_API_KEY || env.OPENAI_API_KEY;
+  if (!imageApiKey) return buildFallbackCover(input.fallbackSeed);
 
   try {
-    const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+    const client = new OpenAI({ apiKey: imageApiKey });
     const imageModel = env.OPENAI_IMAGE_MODEL || "gpt-image-1";
     const result = await client.images.generate({
       model: imageModel,

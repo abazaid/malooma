@@ -124,11 +124,12 @@ npm run build
 5. Stage 2 Outline (H2/H3 + FAQ + logical flow)
 6. Stage 3 Execution (1200+ words, practical examples)
 7. SEO optimization (slug/meta/canonical/LSI)
-8. Internal linking (3–8 links)
-9. AI cover image generation per article (OpenAI image model)
-10. Random author assignment from AI-generated pool (20+ authors)
-11. Scheduling (5/day, single cluster mode)
-12. Publishing + content memory update
+8. Internal linking (2–5 links)
+9. Image prompt generation (async image pipeline)
+10. Async image generation via `gpt-image-1`
+11. Random author assignment from AI-generated pool (20+ authors)
+12. Scheduling (5/day, single cluster mode)
+13. Publishing + content memory update
 
 ## أوامر التشغيل
 ```bash
@@ -138,13 +139,16 @@ npm run pipeline:run
 # 2) نشر المقالات المجدولة التي حان وقتها
 npm run pipeline:publish
 
-# 3) إنشاء مقالة واحدة يدويًا من عنوان
+# 3) معالجة الصور المعلقة بشكل غير متزامن
+npm run pipeline:images
+
+# 4) إنشاء مقالة واحدة يدويًا من عنوان
 npm run pipeline:article -- "فوائد تنظيم الوقت في بيئة العمل"
 
-# 4) worker دوري (يمكن ربطه بـ Coolify cron)
+# 5) worker دوري (يمكن ربطه بـ Coolify cron)
 npm run pipeline:cron
 
-# 5) حذف كل المقالات/المواضيع التجريبية المولدة من الـpipeline
+# 6) حذف كل المقالات/المواضيع التجريبية المولدة من الـpipeline
 npm run pipeline:reset
 ```
 
@@ -173,11 +177,17 @@ npx prisma db push
 ## Cron مقترح (Coolify)
 - `pipeline:run` مرة يوميًا (مثل 01:00)
 - `pipeline:publish` كل 15 دقيقة
+- `pipeline:images` كل 10-15 دقيقة
 
 ## سياسة النشر الحالية
 - حد يومي ثابت: `5` مقالات فقط.
 - النمط: `Cluster Mode` فقط (موضوع محوري واحد + 4 مقالات داعمة).
 - عند فشل تكوين Cluster كامل: لا يتم النشر ولا الجدولة.
+
+## Model Selection (Final Workflow)
+- كتابة المقال: `LLM_MODEL_WRITER=qwen3:8b`
+- مهام خفيفة (تحليل/هيكل/SEO/اقتراح روابط): `LLM_MODEL_LIGHT=qwen3:4b`
+- توليد الصور (خارجي Async): `OPENAI_IMAGE_MODEL=gpt-image-1`
 
 ## ملاحظة
 المواضيع المصدرية تُستخدم كأفكار فقط، والمحتوى الناتج يتم توليده أصليًا داخل المحرك.

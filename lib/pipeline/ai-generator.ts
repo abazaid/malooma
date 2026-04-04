@@ -51,20 +51,20 @@ function parseJson<T>(raw: string): T {
   return JSON.parse(extractJson(raw)) as T;
 }
 
-function wordCount(value: string) {
+function countWords(value: string) {
   return value.split(/\s+/).filter(Boolean).length;
 }
 
-function articleWordCount(pkg: AiArticlePackage) {
-  const joined = [
+function packageWordCount(pkg: AiArticlePackage) {
+  const text = [
     pkg.searchIntent,
     pkg.excerpt,
-    ...pkg.sections.map((s) => `${s.heading} ${s.body}`),
+    ...pkg.sections.map((section) => `${section.heading} ${section.body}`),
     ...pkg.keyPoints,
-    ...pkg.faq.map((f) => `${f.q} ${f.a}`),
+    ...pkg.faq.map((faq) => `${faq.q} ${faq.a}`),
     pkg.conclusion,
   ].join("\n");
-  return wordCount(joined);
+  return countWords(text);
 }
 
 function normalizePackage(input: AiArticlePackage, titleFallback: string): AiArticlePackage {
@@ -72,30 +72,47 @@ function normalizePackage(input: AiArticlePackage, titleFallback: string): AiArt
     ...input,
     title: input.title?.trim() || titleFallback,
     excerpt: input.excerpt?.trim() || `دليل عملي وشامل حول ${titleFallback}.`,
-    h2: (input.h2 ?? []).slice(0, 10),
-    h3: (input.h3 ?? []).slice(0, 12),
-    sections: (input.sections ?? []).filter((s) => s?.heading && s?.body),
-    keyPoints: (input.keyPoints ?? []).filter(Boolean).slice(0, 12),
-    faq: (input.faq ?? []).filter((f) => f?.q && f?.a).slice(0, 10),
+    h2: (input.h2 ?? []).filter(Boolean).slice(0, 10),
+    h3: (input.h3 ?? []).filter(Boolean).slice(0, 12),
+    sections: (input.sections ?? []).filter((item) => item?.heading && item?.body),
+    keyPoints: (input.keyPoints ?? []).filter(Boolean).slice(0, 14),
+    faq: (input.faq ?? []).filter((item) => item?.q && item?.a).slice(0, 8),
     lsiKeywords: (input.lsiKeywords ?? []).filter(Boolean).slice(0, 18),
     metaTitle: (input.metaTitle ?? "").trim(),
     metaDescription: (input.metaDescription ?? "").trim(),
     internalLinkSuggestions: (input.internalLinkSuggestions ?? [])
       .filter((item) => item?.anchor && item?.targetTopic)
-      .slice(0, 8),
+      .slice(0, 6),
   };
 }
 
-async function promptJson<T>(client: OpenAI, model: string, system: string, user: string): Promise<T> {
-  const response = await client.chat.completions.create({
-    model,
-    temperature: 0.7,
+function createTextClient() {
+  const baseURL = process.env.LLM_BASE_URL || process.env.OPENAI_BASE_URL || "http://127.0.0.1:11434/v1";
+  const apiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || "ollama";
+
+  return new OpenAI({
+    apiKey,
+    baseURL,
+  });
+}
+
+async function promptJson<T>(input: {
+  client: OpenAI;
+  model: string;
+  system: string;
+  user: string;
+  temperature?: number;
+}): Promise<T> {
+  const response = await input.client.chat.completions.create({
+    model: input.model,
+    temperature: input.temperature ?? 0.7,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
+      { role: "system", content: input.system },
+      { role: "user", content: input.user },
     ],
   });
+
   const content = response.choices[0]?.message?.content ?? "{}";
   return parseJson<T>(content);
 }
@@ -105,45 +122,41 @@ export async function generateArticlePackageWithAI(input: {
   mainCategory: string;
   subCategory: string;
   relatedTitles: string[];
-  model?: string;
 }) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for AI generation");
-  }
+  const client = createTextClient();
+  const lightModel = process.env.LLM_MODEL_LIGHT || "qwen3:4b";
+  const writerModel = process.env.LLM_MODEL_WRITER || "qwen3:8b";
 
-  const model = input.model || process.env.OPENAI_MODEL || "gpt-4o-mini";
-  const client = new OpenAI({ apiKey });
-
-  const analysis = await promptJson<AnalysisStage>(
+  const analysis = await promptJson<AnalysisStage>({
     client,
-    model,
-    "أنت خبير SEO عربي. نفّذ مرحلة التحليل فقط. أعد JSON صالح فقط.",
-    `المرحلة 1: Analysis
+    model: lightModel,
+    system: "أنت خبير SEO عربي. نفّذ مرحلة التحليل فقط وأعد JSON صحيح فقط.",
+    user: `المرحلة 1: تحليل الموضوع
 الموضوع: ${input.topic}
 التصنيف الرئيسي: ${input.mainCategory}
 التصنيف الفرعي: ${input.subCategory}
 
-المطلوب JSON:
+أعد JSON:
 {
   "primaryKeyword": "...",
   "searchIntent": "تعليمي|عملي|حل مشكلة|مقارنة|تجاري",
   "userGoal": "...",
   "userProblem": "..."
-}
-اجعل التحليل واقعيًا ومباشرًا.`,
-  );
+}`,
+    temperature: 0.3,
+  });
 
-  const outline = await promptJson<OutlineStage>(
+  const outline = await promptJson<OutlineStage>({
     client,
-    model,
-    "أنت محرر محتوى عربي احترافي. نفّذ مرحلة الهيكل فقط. أعد JSON صالح فقط.",
-    `المرحلة 2: Outline
+    model: lightModel,
+    system: "أنت محرر محتوى عربي. نفّذ مرحلة الهيكل فقط وأعد JSON صحيح فقط.",
+    user: `المرحلة 2: بناء الهيكل
 نتيجة التحليل:
 ${JSON.stringify(analysis, null, 2)}
 
 الموضوع: ${input.topic}
-يجب أن يكون الهيكل عمليًا ويراعي نية البحث، بدون حشو.
+أنشئ H2 و H3 مرتبة تخدم نية البحث بدون حشو.
+
 JSON:
 {
   "h1": "...",
@@ -154,34 +167,33 @@ JSON:
   "lsiKeywords": ["..."],
   "flowNote": "..."
 }`,
-  );
+    temperature: 0.4,
+  });
 
-  const executionPrompt = `المرحلة 3: Execution
-اكتب المقال النهائي بناءً على التحليل والهيكل فقط. لا تخرج عنهما.
-لا تعرض مراحل التحليل والهيكل للمستخدم.
+  const executionPrompt = `المرحلة 3: كتابة المقال النهائي
+اعتمد فقط على التحليل والهيكل التاليين:
 
-نتيجة التحليل:
+التحليل:
 ${JSON.stringify(analysis, null, 2)}
 
-نتيجة الهيكل:
+الهيكل:
 ${JSON.stringify(outline, null, 2)}
 
-عناوين مقالات ذات صلة متاحة للربط الداخلي:
-${input.relatedTitles.slice(0, 12).map((t, i) => `${i + 1}. ${t}`).join("\n") || "- لا توجد مقالات منشورة بعد"}
+عناوين مساعدة للربط الداخلي:
+${input.relatedTitles.slice(0, 15).map((title, idx) => `${idx + 1}. ${title}`).join("\n") || "- لا توجد مقالات سابقة"}
 
 قواعد إلزامية:
-1) محتوى عربي طبيعي وبشري واحترافي.
-2) الحد الأدنى 1200 كلمة.
-3) فقرات قصيرة وواضحة.
-4) ممنوع الحشو والتكرار والأسلوب النظري العام.
-5) أضف أمثلة واقعية وخطوات عملية ونصائح قابلة للتطبيق.
-6) اربط المعلومات بنتائج فعلية مثل توفير الوقت أو حل المشكلة أو رفع الدخل.
-7) لا تنسخ أي نص من أي مصدر خارجي.
-8) الربط الداخلي الذكي:
-   - إذا توجد مواضيع ذات صلة: أنشئ اقتراحات anchor text طبيعية.
-   - إذا لا توجد: أنشئ internalLinkSuggestions كروابط مقترحة لإضافتها لاحقًا.
+1) لا تعرض مراحل التحليل أو الهيكل للمستخدم.
+2) اكتب مقال عربي بشري احترافي.
+3) الطول بين 800 و1500 كلمة.
+4) كل فقرة لها فائدة عملية واضحة.
+5) أضف أمثلة واقعية وخطوات ونصائح قابلة للتطبيق.
+6) امنع الحشو والتكرار والأسلوب النظري.
+7) أضف FAQ عملي.
+8) أضف SEO fields: meta title / meta description / keywords.
+9) اقترح روابط داخلية طبيعية (2-5).
 
-أعد JSON فقط بالشكل:
+أعد JSON فقط بالبنية:
 {
   "searchIntent": "...",
   "title": "...",
@@ -199,26 +211,29 @@ ${input.relatedTitles.slice(0, 12).map((t, i) => `${i + 1}. ${t}`).join("\n") ||
 }`;
 
   let pkg = normalizePackage(
-    await promptJson<AiArticlePackage>(
+    await promptJson<AiArticlePackage>({
       client,
-      model,
-      "أنت كاتب عربي محترف وخبير SEO. أعد JSON صالح فقط.",
-      executionPrompt,
-    ),
+      model: writerModel,
+      system: "أنت كاتب عربي محترف. أعد JSON صالح فقط.",
+      user: executionPrompt,
+      temperature: 0.7,
+    }),
     outline.h1 || input.topic,
   );
 
-  if (articleWordCount(pkg) < 1200) {
+  const words = packageWordCount(pkg);
+  if (words < 800 || words > 1500) {
     pkg = normalizePackage(
-      await promptJson<AiArticlePackage>(
+      await promptJson<AiArticlePackage>({
         client,
-        model,
-        "أنت كاتب عربي محترف وخبير SEO. وسّع المقال مع الحفاظ على الجودة. أعد JSON فقط.",
-        `المقال الحالي أقل من 1200 كلمة. وسّعه فورًا دون تكرار أو حشو.
-النص الحالي:
+        model: writerModel,
+        system: "أنت محرر عربي. صحّح طول المقال فقط إلى 800-1500 كلمة مع الحفاظ على الجودة. JSON فقط.",
+        user: `الطول الحالي ${words} كلمة. أعد كتابة المحتوى بنفس الفكرة بحيث يصبح بين 800 و1500 كلمة.
+الناتج الحالي:
 ${JSON.stringify(pkg)}
-أعد نفس البنية تمامًا.`,
-      ),
+أعد نفس JSON schema.`,
+        temperature: 0.5,
+      }),
       pkg.title || input.topic,
     );
   }

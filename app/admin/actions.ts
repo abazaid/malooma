@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { slugifyArabic } from "@/lib/slug";
 import { enqueueManualTopic, intakeTopicsFromReference } from "@/lib/pipeline/topic-intake";
-import { publishDueArticles, runContentPipeline } from "@/lib/pipeline/engine";
+import { processPendingImages, publishDueArticles, runContentPipeline } from "@/lib/pipeline/engine";
 
 type ActionResult = { ok: boolean; message: string };
 
@@ -166,5 +166,13 @@ export async function publishDueNowAction(): Promise<void> {
     revalidatePath("/admin");
     revalidatePath("/");
     revalidatePath("/latest");
+  });
+}
+
+export async function processImagesNowAction(): Promise<void> {
+  await withGuard(async () => {
+    await processPendingImages(5);
+    revalidatePath("/admin/pipeline");
+    revalidatePath("/");
   });
 }

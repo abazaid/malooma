@@ -26,7 +26,7 @@ export async function selectRelatedArticles(params: {
     }))
     .filter((item) => item.score > 0.08)
     .sort((a, b) => b.score - a.score)
-    .slice(0, Math.max(3, Math.min(params.max, 8)));
+    .slice(0, Math.max(2, Math.min(params.max, 5)));
 
   return scored;
 }
