@@ -113,3 +113,45 @@ npm run build
 - المشروع يستخدم fallback data من `reference-data/` عند غياب قاعدة البيانات، لضمان عمل القوالب مباشرة.
 - ملفات المرجع (`reference-data/*`) ناتجة من crawl داخلي وتُستخدم كبذرة تصنيفية فقط.
 
+# Content Production Engine
+
+## الهدف
+محرك إنتاج محتوى تلقائي ينفذ:
+1. Topic intake from `reference-data/`
+2. Cleaning + dedupe + anti-duplicate
+3. Auto classification (main/sub category)
+4. Outline generation
+5. Article writing (1200+ words)
+6. SEO optimization (slug/meta/canonical/LSI)
+7. Internal linking (3–8 links)
+8. Image prompt generation
+9. Scheduling (10/day)
+10. Publishing + content memory update
+
+## أوامر التشغيل
+```bash
+# 1) إدخال المواضيع + تنظيف + كتابة + جدولة
+npm run pipeline:run
+
+# 2) نشر المقالات المجدولة التي حان وقتها
+npm run pipeline:publish
+
+# 3) إنشاء مقالة واحدة يدويًا من عنوان
+npm run pipeline:article -- "فوائد تنظيم الوقت في بيئة العمل"
+
+# 4) worker دوري (يمكن ربطه بـ Coolify cron)
+npm run pipeline:cron
+```
+
+## جداول قاعدة البيانات المضافة
+- `TopicQueue`
+- `ContentMemory`
+- `PublishingJob`
+- `GeneratedImagePrompt`
+
+## Cron مقترح (Coolify)
+- `pipeline:run` مرة يوميًا (مثل 01:00)
+- `pipeline:publish` كل 15 دقيقة
+
+## ملاحظة
+المواضيع المصدرية تُستخدم كأفكار فقط، والمحتوى الناتج يتم توليده أصليًا داخل المحرك.

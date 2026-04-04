@@ -333,6 +333,115 @@ export const contentRepository = {
   }),
 
   getArticleBySlug: cache(async (slug: string): Promise<ArticleModel | null> => {
+    if (process.env.DATABASE_URL) {
+      try {
+        const dbArticle = await prisma.article.findFirst({
+          where: {
+            slug: {
+              equals: normalizeIncomingSlug(slug),
+              mode: "insensitive",
+            },
+          },
+          include: {
+            author: true,
+            reviewer: true,
+            category: { include: { parent: true } },
+            sections: true,
+            faqs: true,
+            sources: true,
+            relatedFrom: {
+              include: {
+                relatedArticle: {
+                  include: {
+                    author: true,
+                    category: { include: { parent: true } },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (dbArticle) {
+          const mainCategoryName = dbArticle.category.parent?.name ?? dbArticle.category.name;
+          const mainCategorySlug = dbArticle.category.parent?.slug ?? dbArticle.category.slug;
+
+          const relatedArticles: ArticleCardModel[] = dbArticle.relatedFrom.slice(0, 8).map((rel) => {
+            const related = rel.relatedArticle;
+            return {
+              id: related.id,
+              title: related.title,
+              slug: related.slug,
+              excerpt: related.excerpt,
+              categoryName: related.category.parent?.name ?? related.category.name,
+              categorySlug: related.category.parent?.slug ?? related.category.slug,
+              subcategoryName: related.category.name,
+              subcategorySlug: related.category.slug,
+              publishedAt: (related.publishedAt ?? related.createdAt).toISOString(),
+              readingMinutes: related.readingMinutes,
+              heroImage: ARTICLE_IMAGE,
+              author: {
+                id: related.author.id,
+                slug: related.author.slug,
+                name: related.author.displayName,
+                bio: related.author.bio ?? "",
+              },
+            };
+          });
+
+          return {
+            id: dbArticle.id,
+            title: dbArticle.title,
+            slug: dbArticle.slug,
+            excerpt: dbArticle.excerpt,
+            categoryName: mainCategoryName,
+            categorySlug: mainCategorySlug,
+            subcategoryName: dbArticle.category.name,
+            subcategorySlug: dbArticle.category.slug,
+            publishedAt: (dbArticle.publishedAt ?? dbArticle.createdAt).toISOString(),
+            updatedAt: dbArticle.updatedAt.toISOString(),
+            readingMinutes: dbArticle.readingMinutes,
+            heroImage: ARTICLE_IMAGE,
+            author: {
+              id: dbArticle.author.id,
+              slug: dbArticle.author.slug,
+              name: dbArticle.author.displayName,
+              bio: dbArticle.author.bio ?? "",
+            },
+            reviewer: dbArticle.reviewer
+              ? {
+                  id: dbArticle.reviewer.id,
+                  slug: dbArticle.reviewer.slug,
+                  name: dbArticle.reviewer.displayName,
+                  bio: dbArticle.reviewer.bio ?? "",
+                }
+              : undefined,
+            sections: dbArticle.sections
+              .sort((a, b) => a.orderNo - b.orderNo)
+              .map((section) => ({
+                id: section.id,
+                heading: section.heading ?? undefined,
+                blockType: section.blockType as ArticleModel["sections"][number]["blockType"],
+                content: section.content,
+                payload: (section.payload as Record<string, unknown>) ?? undefined,
+              })),
+            faqs: dbArticle.faqs
+              .sort((a, b) => a.orderNo - b.orderNo)
+              .map((faq) => ({ question: faq.question, answer: faq.answer })),
+            sources: dbArticle.sources
+              .sort((a, b) => a.orderNo - b.orderNo)
+              .map((source) => ({ title: source.title, url: source.url, publisher: source.publisher ?? undefined })),
+            relatedArticles,
+            keywords: dbArticle.keywords,
+            canonical: dbArticle.canonicalUrl ?? absoluteUrl(`/articles/${dbArticle.slug}`),
+            trustNote: "تمت مراجعة هذا المحتوى من فريق التحرير وفق سياسة التدقيق الداخلية.",
+          };
+        }
+      } catch {
+        // ignore DB errors and continue with memory fallback
+      }
+    }
+
     const memory = await buildMemoryDataset();
     const article = memory.articles.find((item) => slugEquals(item.slug, slug));
     if (!article) return null;

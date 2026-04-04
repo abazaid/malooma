@@ -10,7 +10,11 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
-    "seed": "npm run prisma:seed"
+    "seed": "npm run prisma:seed",
+    "pipeline:run": "tsx scripts/run-content-pipeline.ts",
+    "pipeline:publish": "tsx scripts/publish-due.ts",
+    "pipeline:article": "tsx scripts/generate-one-article.ts",
+    "pipeline:cron": "tsx scripts/cron-worker.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",
