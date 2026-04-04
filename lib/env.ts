@@ -8,6 +8,8 @@ const envSchema = z.object({
   REDIS_URL: z.string().optional(),
   MEILI_HOST: z.string().optional(),
   MEILI_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

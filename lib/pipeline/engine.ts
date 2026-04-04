@@ -9,6 +9,7 @@ import { optimizeSeo } from "@/lib/pipeline/seo-engine";
 import { buildDailyPublishingSlots, getNextPublishingDay } from "@/lib/pipeline/scheduler";
 import { cleanAndDedupeTopics, intakeTopicsFromReference } from "@/lib/pipeline/topic-intake";
 import { writeArticleDraft } from "@/lib/pipeline/article-writer";
+import { generateArticlePackageWithAI } from "@/lib/pipeline/ai-generator";
 import { slugifyArabic } from "@/lib/slug";
 
 const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL ?? "https://malooma.org";
@@ -98,8 +99,48 @@ async function processSingleTopic(topicId: string) {
   if (!["CLEANED", "OUTLINED", "WRITTEN"].includes(topic.status)) return null;
 
   const { mainCategory, subCategory } = await classifyTopic(topic.rawTitle);
-  const outline = generateOutline(topic.rawTitle);
-  const draft = writeArticleDraft(topic.rawTitle, outline);
+  const relatedMemory = await prisma.contentMemory.findMany({
+    where: { categoryPath: { contains: mainCategory.name, mode: "insensitive" } },
+    orderBy: { updatedAt: "desc" },
+    take: 12,
+  });
+
+  let outline = generateOutline(topic.rawTitle);
+  let draft = writeArticleDraft(topic.rawTitle, outline);
+  let aiMetaTitle = "";
+  let aiMetaDescription = "";
+
+  if (process.env.OPENAI_API_KEY) {
+    const aiPackage = await generateArticlePackageWithAI({
+      topic: topic.rawTitle,
+      mainCategory: mainCategory.name,
+      subCategory: subCategory.name,
+      relatedTitles: relatedMemory.map((item) => item.title),
+    });
+
+    outline = {
+      searchIntent: aiPackage.searchIntent,
+      h1: aiPackage.title,
+      h2: aiPackage.h2,
+      h3: aiPackage.h3,
+      faq: aiPackage.faq.map((item) => ({ q: item.q, aHint: item.a })),
+      keyPoints: aiPackage.keyPoints,
+      conclusion: aiPackage.conclusion,
+      lsiKeywords: aiPackage.lsiKeywords,
+    };
+
+    draft = {
+      intro: aiPackage.excerpt,
+      sections: aiPackage.sections.map((section) => ({ heading: section.heading, text: section.body })),
+      bulletBlock: aiPackage.keyPoints.map((point) => `- ${point}`).join("\n"),
+      conclusion: aiPackage.conclusion,
+      wordCount: aiPackage.sections.map((section) => section.body).join(" ").split(/\s+/).filter(Boolean).length,
+    };
+
+    aiMetaTitle = aiPackage.metaTitle;
+    aiMetaDescription = aiPackage.metaDescription;
+  }
+
   const seo = optimizeSeo({
     title: outline.h1,
     excerpt: buildExcerpt(topic.rawTitle, outline.searchIntent),
@@ -217,8 +258,8 @@ async function processSingleTopic(topicId: string) {
   await prisma.seoMeta.create({
     data: {
       articleId: article.id,
-      metaTitle: seo.metaTitle,
-      metaDescription: seo.metaDescription,
+      metaTitle: aiMetaTitle || seo.metaTitle,
+      metaDescription: aiMetaDescription || seo.metaDescription,
       canonicalUrl: seo.canonical,
       schemaJson: {
         article: buildArticleSchema({
