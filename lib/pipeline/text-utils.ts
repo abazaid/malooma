@@ -7,7 +7,8 @@ export function normalizeTopicTitle(title: string) {
     .normalize("NFKC")
     .replace(ARABIC_DIACRITICS, "")
     .replace(/[ـ]/g, "")
-    .replace(/[\W_]+/g, " ")
+    // Keep letters and numbers from all languages (including Arabic).
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .toLowerCase();
 }
