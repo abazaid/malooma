@@ -15,6 +15,7 @@
     "pipeline:publish": "tsx scripts/publish-due.ts",
     "pipeline:images": "tsx scripts/process-images.ts",
     "pipeline:article": "tsx scripts/generate-one-article.ts",
+    "pipeline:intake": "tsx scripts/intake-topics.ts",
     "pipeline:cron": "tsx scripts/cron-worker.ts",
     "pipeline:reset": "tsx scripts/reset-generated-content.ts"
   },
