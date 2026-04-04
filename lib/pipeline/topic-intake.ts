@@ -1,6 +1,7 @@
-﻿import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
+import { logPipelineEvent } from "@/lib/pipeline/events";
 import { hashTitle, jaccardSimilarity, normalizeTopicTitle } from "@/lib/pipeline/text-utils";
 
 function parseTopicFromLine(line: string): string | null {
@@ -15,34 +16,87 @@ function parseTopicFromLine(line: string): string | null {
   }
 }
 
-export async function intakeTopicsFromReference(fileName = "mawdoo3_topic_links_from_categories.txt") {
-  const filePath = path.join(process.cwd(), "reference-data", fileName);
-  const content = await readFile(filePath, "utf8");
-  const lines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+function extractUrls(content: string) {
+  const urls = new Set<string>();
 
-  let inserted = 0;
-  for (const line of lines) {
-    const title = parseTopicFromLine(line);
-    if (!title) continue;
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      urls.add(trimmed);
+    }
+  }
 
-    const normalized = normalizeTopicTitle(title);
-    const titleHash = hashTitle(normalized);
+  const matches = content.match(/https?:\/\/[^\s<>"']+/g) ?? [];
+  for (const value of matches) {
+    urls.add(value.trim());
+  }
 
-    await prisma.topicQueue.upsert({
-      where: { titleHash },
-      create: {
+  return [...urls];
+}
+
+export async function intakeTopicsFromReference(fileName = "__scan_all__") {
+  const referenceDir = path.join(process.cwd(), "reference-data");
+  const files = await readdir(referenceDir);
+  const preferredFile = fileName === "__scan_all__" ? undefined : files.find((item) => item === fileName);
+  const candidateFiles = preferredFile
+    ? [preferredFile]
+    : files.filter((item) => item.endsWith(".txt") || item.endsWith(".xml"));
+
+  const uniqueByHash = new Map<
+    string,
+    {
+      rawTitle: string;
+      normalizedTitle: string;
+      titleHash: string;
+      status: "QUEUED";
+      keywords: string[];
+    }
+  >();
+
+  for (const file of candidateFiles) {
+    const content = await readFile(path.join(referenceDir, file), "utf8");
+    const urls = extractUrls(content);
+    for (const url of urls) {
+      const title = parseTopicFromLine(url);
+      if (!title) continue;
+      const normalized = normalizeTopicTitle(title);
+      const titleHash = hashTitle(normalized);
+      if (uniqueByHash.has(titleHash)) continue;
+
+      uniqueByHash.set(titleHash, {
         rawTitle: title,
         normalizedTitle: normalized,
         titleHash,
         status: "QUEUED",
         keywords: normalized.split(" ").slice(0, 12),
-      },
-      update: {},
-    });
-    inserted += 1;
+      });
+    }
   }
 
-  return { inserted };
+  const rows = [...uniqueByHash.values()];
+  const chunkSize = 5000;
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const result = await prisma.topicQueue.createMany({
+      data: chunk,
+      skipDuplicates: true,
+    });
+    inserted += result.count;
+  }
+
+  await logPipelineEvent({
+    stage: "TOPIC_INTAKE",
+    status: "SUCCESS",
+    message: `Reference intake completed. inserted=${inserted} scanned=${rows.length}`,
+    metaJson: {
+      inserted,
+      scanned: rows.length,
+      files: candidateFiles,
+    },
+  });
+
+  return { inserted, scanned: rows.length, files: candidateFiles.length };
 }
 
 export async function cleanAndDedupeTopics(limit = 500) {
@@ -117,5 +171,46 @@ export async function cleanAndDedupeTopics(limit = 500) {
     });
   }
 
+  await logPipelineEvent({
+    stage: "TOPIC_CLEANING",
+    status: "SUCCESS",
+    message: `Topic cleaning done. cleaned=${cleanIds.length}, skipped=${skippedIds.length}`,
+    metaJson: {
+      cleaned: cleanIds.length,
+      skipped: skippedIds.length,
+    },
+  });
+
   return { cleaned: cleanIds.length, skipped: skippedIds.length };
+}
+
+export async function enqueueManualTopic(title: string) {
+  const rawTitle = title.trim();
+  if (!rawTitle) return null;
+
+  const normalized = normalizeTopicTitle(rawTitle);
+  const titleHash = hashTitle(normalized);
+
+  const topic = await prisma.topicQueue.upsert({
+    where: { titleHash },
+    create: {
+      rawTitle,
+      normalizedTitle: normalized,
+      titleHash,
+      status: "QUEUED",
+      keywords: normalized.split(" ").slice(0, 12),
+    },
+    update: {
+      rawTitle,
+    },
+  });
+
+  await logPipelineEvent({
+    stage: "TOPIC_MANUAL_ADD",
+    status: "SUCCESS",
+    topicId: topic.id,
+    message: `Manual topic queued: ${rawTitle}`,
+  });
+
+  return topic;
 }

@@ -14,6 +14,7 @@ import { slugifyArabic } from "@/lib/slug";
 import { ensureContributorPools, pickRandomItem } from "@/lib/pipeline/author-pool";
 import { generateCoverImage } from "@/lib/pipeline/cover-image";
 import { jaccardSimilarity } from "@/lib/pipeline/text-utils";
+import { logPipelineEvent } from "@/lib/pipeline/events";
 
 const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL ?? "https://malooma.org";
 const CLUSTER_SIZE = 5;
@@ -54,12 +55,27 @@ function buildFaqSchema(faqs: { question: string; answer: string }[]) {
   };
 }
 
-async function processSingleTopic(topicId: string) {
+async function processSingleTopic(topicId: string, runKey?: string) {
   const topic = await prisma.topicQueue.findUnique({ where: { id: topicId } });
   if (!topic) return null;
   if (!["CLEANED", "OUTLINED", "WRITTEN"].includes(topic.status)) return null;
 
+  await logPipelineEvent({
+    stage: "TOPIC_PROCESSING_STARTED",
+    status: "INFO",
+    runKey,
+    topicId: topic.id,
+    message: topic.rawTitle,
+  });
+
   const { mainCategory, subCategory } = await classifyTopic(topic.rawTitle);
+  await logPipelineEvent({
+    stage: "TOPIC_CLASSIFIED",
+    status: "SUCCESS",
+    runKey,
+    topicId: topic.id,
+    message: `${mainCategory.name} -> ${subCategory.name}`,
+  });
   const relatedMemory = await prisma.contentMemory.findMany({
     where: { categoryPath: { contains: mainCategory.name, mode: "insensitive" } },
     orderBy: { updatedAt: "desc" },
@@ -102,6 +118,14 @@ async function processSingleTopic(topicId: string) {
     aiMetaTitle = aiPackage.metaTitle;
     aiMetaDescription = aiPackage.metaDescription;
     aiInternalLinkSuggestions = aiPackage.internalLinkSuggestions;
+
+    await logPipelineEvent({
+      stage: "AI_GENERATION_DONE",
+      status: "SUCCESS",
+      runKey,
+      topicId: topic.id,
+      message: `AI article generated (${draft.wordCount} words)`,
+    });
   }
 
   const seo = optimizeSeo({
@@ -119,6 +143,13 @@ async function processSingleTopic(topicId: string) {
         status: "SKIPPED",
         errorMessage: "Slug already exists; recommend updating existing article instead of creating duplicate.",
       },
+    });
+    await logPipelineEvent({
+      stage: "TOPIC_SKIPPED_DUPLICATE",
+      status: "WARNING",
+      runKey,
+      topicId: topic.id,
+      message: `Duplicate slug: ${seo.slug}`,
     });
     return null;
   }
@@ -142,6 +173,14 @@ async function processSingleTopic(topicId: string) {
       canonicalUrl: seo.canonical,
       topicId: topic.id,
     },
+  });
+  await logPipelineEvent({
+    stage: "ARTICLE_DRAFT_CREATED",
+    status: "SUCCESS",
+    runKey,
+    topicId: topic.id,
+    articleId: article.id,
+    message: article.slug,
   });
 
   let orderNo = 1;
@@ -272,11 +311,27 @@ async function processSingleTopic(topicId: string) {
       heroMediaId: media.id,
     },
   });
+  await logPipelineEvent({
+    stage: "ARTICLE_COVER_ATTACHED",
+    status: "SUCCESS",
+    runKey,
+    topicId: topic.id,
+    articleId: article.id,
+    message: generatedCover.url,
+  });
 
   const relatedCount = await attachInternalLinks({
     articleId: article.id,
     articleTitle: article.title,
     categoryId: article.categoryId,
+  });
+  await logPipelineEvent({
+    stage: "INTERNAL_LINKS_ATTACHED",
+    status: "SUCCESS",
+    runKey,
+    topicId: topic.id,
+    articleId: article.id,
+    message: `Related count: ${relatedCount}`,
   });
 
   if (relatedCount === 0 && aiInternalLinkSuggestions.length > 0) {
@@ -303,6 +358,14 @@ async function processSingleTopic(topicId: string) {
       subCategoryId: subCategory.id,
     },
   });
+  await logPipelineEvent({
+    stage: "TOPIC_WRITTEN",
+    status: "SUCCESS",
+    runKey,
+    topicId: topic.id,
+    articleId: article.id,
+    message: "Draft is ready",
+  });
 
   await upsertContentMemory({
     articleId: article.id,
@@ -316,7 +379,7 @@ async function processSingleTopic(topicId: string) {
   return { articleId: article.id, relatedCount, topicId: topic.id };
 }
 
-export async function processTopicsToDrafts(limit = 10) {
+export async function processTopicsToDrafts(limit = 10, runKey?: string) {
   const topics = await prisma.topicQueue.findMany({
     where: { status: "CLEANED" },
     orderBy: { createdAt: "asc" },
@@ -325,7 +388,7 @@ export async function processTopicsToDrafts(limit = 10) {
 
   const results = [] as Array<{ articleId: string; relatedCount: number; topicId: string }>;
   for (const topic of topics) {
-    const result = await processSingleTopic(topic.id);
+    const result = await processSingleTopic(topic.id, runKey);
     if (result) results.push(result);
   }
 
@@ -419,9 +482,15 @@ async function attachClusterLinks(input: {
   }
 }
 
-async function processDailyClusterToDrafts() {
+async function processDailyClusterToDrafts(runKey?: string) {
   const cluster = await selectDailyTopicCluster();
   if (!cluster) {
+    await logPipelineEvent({
+      stage: "CLUSTER_SELECTION",
+      status: "WARNING",
+      runKey,
+      message: "No coherent 5-topic cluster found.",
+    });
     return {
       drafted: 0,
       clusterMode: true,
@@ -430,11 +499,22 @@ async function processDailyClusterToDrafts() {
     };
   }
 
+  await logPipelineEvent({
+    stage: "CLUSTER_SELECTION",
+    status: "SUCCESS",
+    runKey,
+    topicId: cluster.coreTopic.id,
+    message: `Core: ${cluster.coreTopic.rawTitle}`,
+    metaJson: {
+      supporting: cluster.supportingTopics.map((item) => item.rawTitle),
+    },
+  });
+
   const orderedTopics = [cluster.coreTopic, ...cluster.supportingTopics];
   const results: Array<{ articleId: string; relatedCount: number; topicId: string }> = [];
 
   for (const topic of orderedTopics) {
-    const result = await processSingleTopic(topic.id);
+    const result = await processSingleTopic(topic.id, runKey);
     if (result) results.push(result);
   }
 
@@ -451,6 +531,12 @@ async function processDailyClusterToDrafts() {
         errorMessage: "Cluster not completed (must be exactly 5 linked articles).",
       },
     });
+    await logPipelineEvent({
+      stage: "CLUSTER_ROLLBACK",
+      status: "ERROR",
+      runKey,
+      message: "Cluster generation incomplete. Drafts rolled back.",
+    });
 
     return {
       drafted: 0,
@@ -461,6 +547,16 @@ async function processDailyClusterToDrafts() {
   }
 
   await attachClusterLinks({ articleIds: results.map((item) => item.articleId) });
+  for (const item of results) {
+    await logPipelineEvent({
+      stage: "CLUSTER_LINKS_DONE",
+      status: "SUCCESS",
+      runKey,
+      topicId: item.topicId,
+      articleId: item.articleId,
+      message: "Linked to cluster peers",
+    });
+  }
 
   return {
     drafted: results.length,
@@ -471,7 +567,7 @@ async function processDailyClusterToDrafts() {
   };
 }
 
-export async function scheduleDailyPublishing(batchSize = 5, articleIds?: string[]) {
+export async function scheduleDailyPublishing(batchSize = 5, articleIds?: string[], runKey?: string) {
   const cappedBatchSize = Math.min(5, Math.max(1, batchSize));
   const nextDay = getNextPublishingDay();
   const slots = buildDailyPublishingSlots(nextDay, cappedBatchSize);
@@ -512,11 +608,27 @@ export async function scheduleDailyPublishing(batchSize = 5, articleIds?: string
       completedCount: 0,
     },
   });
+  await logPipelineEvent({
+    stage: "SCHEDULING_DONE",
+    status: "SUCCESS",
+    runKey,
+    message: `Scheduled ${articles.length} articles for ${nextDay.toISOString()}`,
+  });
+
+  for (const article of articles) {
+    await logPipelineEvent({
+      stage: "ARTICLE_SCHEDULED",
+      status: "SUCCESS",
+      runKey,
+      articleId: article.id,
+      message: "Article moved to SCHEDULED",
+    });
+  }
 
   return { scheduled: articles.length, day: nextDay.toISOString() };
 }
 
-export async function publishDueArticles(limit = 5) {
+export async function publishDueArticles(limit = 5, runKey?: string) {
   const cappedLimit = Math.min(5, Math.max(1, limit));
   const due = await prisma.article.findMany({
     where: {
@@ -552,6 +664,15 @@ export async function publishDueArticles(limit = 5) {
       summary: article.excerpt,
     });
 
+    await logPipelineEvent({
+      stage: "ARTICLE_PUBLISHED",
+      status: "SUCCESS",
+      runKey,
+      topicId: article.topicId ?? undefined,
+      articleId: article.id,
+      message: article.slug,
+    });
+
     published += 1;
   }
 
@@ -571,6 +692,7 @@ export async function runContentPipeline(input?: {
   dailyLimit?: number;
   scheduleBatch?: number;
 }) {
+  const runKey = `run-${new Date().toISOString()}`;
   const intake = input?.intake ?? true;
   const enforcedClusterSize = CLUSTER_SIZE;
   const scheduleBatch = Math.min(enforcedClusterSize, Math.max(enforcedClusterSize, input?.scheduleBatch ?? enforcedClusterSize));
@@ -587,11 +709,15 @@ export async function runContentPipeline(input?: {
   };
 
   report.cleaning = await cleanAndDedupeTopics(1500);
-  const clusterDrafting = await processDailyClusterToDrafts();
+  const clusterDrafting = await processDailyClusterToDrafts(runKey);
   report.drafting = clusterDrafting;
 
   if (clusterDrafting.drafted === CLUSTER_SIZE) {
-    report.scheduling = await scheduleDailyPublishing(scheduleBatch, clusterDrafting.results.map((item) => item.articleId));
+    report.scheduling = await scheduleDailyPublishing(
+      scheduleBatch,
+      clusterDrafting.results.map((item) => item.articleId),
+      runKey,
+    );
   } else {
     report.scheduling = {
       scheduled: 0,
@@ -599,6 +725,14 @@ export async function runContentPipeline(input?: {
       reason: "Cluster policy: scheduling skipped because complete 5-article cluster was not generated.",
     };
   }
+
+  await logPipelineEvent({
+    stage: "PIPELINE_RUN_COMPLETED",
+    status: "SUCCESS",
+    runKey,
+    message: "Pipeline run finished",
+    metaJson: report as Prisma.JsonObject,
+  });
 
   return report;
 }

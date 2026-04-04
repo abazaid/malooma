@@ -153,6 +153,22 @@ npm run pipeline:reset
 - `ContentMemory`
 - `PublishingJob`
 - `GeneratedImagePrompt`
+- `PipelineEvent` (تتبع مراحل التنفيذ لكل مقال)
+
+## لوحة الأدمن للأتمتة
+- صفحة المتابعة: `/admin/pipeline`
+- تعرض:
+- حالات المواضيع بالألوان (بانتظار/منشور/متجاوز...)
+- سجل مراحل التنفيذ لكل مقالة
+- آخر وظائف الجدولة والنشر
+- تشغيل يدوي: استيراد مواضيع `reference-data` + تشغيل Pipeline + نشر المستحق
+- إضافة موضوع جديد يدويًا للـQueue
+
+## بعد التحديث
+نفّذ مرة واحدة:
+```bash
+npx prisma db push
+```
 
 ## Cron مقترح (Coolify)
 - `pipeline:run` مرة يوميًا (مثل 01:00)

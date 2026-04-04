@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { slugifyArabic } from "@/lib/slug";
+import { enqueueManualTopic, intakeTopicsFromReference } from "@/lib/pipeline/topic-intake";
+import { publishDueArticles, runContentPipeline } from "@/lib/pipeline/engine";
 
 type ActionResult = { ok: boolean; message: string };
 
@@ -129,5 +131,40 @@ export async function setTrendingAction(formData: FormData): Promise<void> {
 
     revalidatePath("/");
     revalidatePath("/admin/trending");
+  });
+}
+
+export async function addTopicToQueueAction(formData: FormData): Promise<void> {
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) return;
+
+  await withGuard(async () => {
+    await enqueueManualTopic(title);
+    revalidatePath("/admin/pipeline");
+  });
+}
+
+export async function importAllReferenceTopicsAction(): Promise<void> {
+  await withGuard(async () => {
+    await intakeTopicsFromReference();
+    revalidatePath("/admin/pipeline");
+  });
+}
+
+export async function runPipelineNowAction(): Promise<void> {
+  await withGuard(async () => {
+    await runContentPipeline({ intake: false, dailyLimit: 5, scheduleBatch: 5 });
+    revalidatePath("/admin/pipeline");
+    revalidatePath("/admin");
+  });
+}
+
+export async function publishDueNowAction(): Promise<void> {
+  await withGuard(async () => {
+    await publishDueArticles(5);
+    revalidatePath("/admin/pipeline");
+    revalidatePath("/admin");
+    revalidatePath("/");
+    revalidatePath("/latest");
   });
 }

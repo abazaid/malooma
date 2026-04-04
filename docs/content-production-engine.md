@@ -61,6 +61,7 @@
 - `lib/pipeline/scheduler.ts`
 - `lib/pipeline/memory.ts`
 - `lib/pipeline/engine.ts`
+- `lib/pipeline/events.ts`
 
 ## Commands
 - `npm run pipeline:run`
@@ -80,3 +81,4 @@
 - يتم إنشاء 1 Core + 4 Supporting يوميًا فقط.
 - كل مقال يرتبط بالمقالات الأربعة الأخرى داخل نفس الـCluster.
 - عند عدم اكتمال Cluster، يتم إيقاف الجدولة تلقائيًا.
+- يوجد سجل مراحل تفصيلي في جدول `PipelineEvent` ويظهر في `/admin/pipeline`.

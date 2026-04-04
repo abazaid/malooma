@@ -10,6 +10,7 @@ async function main() {
     console.log("No generated articles found to reset.");
   } else {
     await prisma.$transaction([
+      prisma.pipelineEvent.deleteMany({}),
       prisma.articleRelated.deleteMany({
         where: {
           OR: [

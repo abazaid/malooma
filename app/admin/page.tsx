@@ -28,6 +28,9 @@ export default async function AdminDashboardPage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h3 className="text-lg font-bold text-slate-900">مهام سريعة</h3>
         <div className="mt-4 flex flex-wrap gap-2">
+          <Link href="/admin/pipeline" className="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
+            مراقبة الأتمتة
+          </Link>
           <Link href="/admin/categories" className="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
             إضافة قسم
           </Link>

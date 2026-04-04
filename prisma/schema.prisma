@@ -144,6 +144,7 @@ model Article {
   topic           TopicQueue?      @relation(fields: [topicId], references: [id], onDelete: SetNull)
   contentMemory   ContentMemory?
   generatedImagePrompt GeneratedImagePrompt?
+  pipelineEvents   PipelineEvent[]
 
   @@index([status, publishedAt])
   @@index([categoryId, publishedAt])
@@ -317,6 +318,7 @@ model TopicQueue {
   mainCategory     Category?   @relation("TopicMainCategory", fields: [mainCategoryId], references: [id], onDelete: SetNull)
   subCategory      Category?   @relation("TopicSubCategory", fields: [subCategoryId], references: [id], onDelete: SetNull)
   article          Article?
+  pipelineEvents   PipelineEvent[]
 
   @@index([status, createdAt])
 }
@@ -347,6 +349,7 @@ model PublishingJob {
   errorMessage   String?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
+  events         PipelineEvent[]
 
   @@index([status, runAt])
 }
@@ -359,4 +362,26 @@ model GeneratedImagePrompt {
   createdAt      DateTime @default(now())
 
   article        Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+}
+
+model PipelineEvent {
+  id             String   @id @default(cuid())
+  runKey         String?
+  stage          String
+  status         String
+  message        String?
+  metaJson       Json?
+  topicId        String?
+  articleId      String?
+  publishingJobId String?
+  createdAt      DateTime @default(now())
+
+  topic          TopicQueue?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  article        Article?      @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  publishingJob  PublishingJob? @relation(fields: [publishingJobId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([topicId, createdAt])
+  @@index([articleId, createdAt])
+  @@index([runKey, createdAt])
 }
