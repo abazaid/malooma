@@ -159,6 +159,15 @@ export async function runPipelineNowAction(): Promise<void> {
   });
 }
 
+export async function startManualPublishingSystemAction(): Promise<void> {
+  await withGuard(async () => {
+    // Manual run outside cron. This does not alter cron schedules.
+    await runContentPipeline({ intake: false, dailyLimit: 5, scheduleBatch: 5 });
+    revalidatePath("/admin/pipeline");
+    revalidatePath("/admin");
+  });
+}
+
 export async function publishDueNowAction(): Promise<void> {
   await withGuard(async () => {
     await publishDueArticles(5);

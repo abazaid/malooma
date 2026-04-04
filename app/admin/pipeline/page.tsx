@@ -6,6 +6,7 @@ import {
   processImagesNowAction,
   publishDueNowAction,
   runPipelineNowAction,
+  startManualPublishingSystemAction,
 } from "@/app/admin/actions";
 import { prisma } from "@/lib/prisma";
 
@@ -136,6 +137,11 @@ export default async function AdminPipelinePage() {
           <h3 className="text-lg font-bold text-slate-900">تشغيل مباشر</h3>
           <p className="text-sm text-slate-700">استيراد جميع مواضيع المنافسين من `reference-data` وتشغيل النظام Cluster Mode (5 مقالات).</p>
           <div className="flex flex-wrap gap-2">
+            <form action={startManualPublishingSystemAction}>
+              <button type="submit" className="rounded bg-emerald-700 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-800">
+                ابدأ نظام النشر الآن (5 مقالات)
+              </button>
+            </form>
             <form action={importAllReferenceTopicsAction}>
               <button type="submit" className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">
                 استيراد كل المواضيع من reference-data
