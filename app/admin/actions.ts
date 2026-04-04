@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { slugifyArabic } from "@/lib/slug";
 import { enqueueManualTopic, intakeTopicsFromReference } from "@/lib/pipeline/topic-intake";
 import { processPendingImages, publishDueArticles, runContentPipeline } from "@/lib/pipeline/engine";
+import { importReferenceTaxonomyToDb } from "@/lib/pipeline/taxonomy-import";
 
 type ActionResult = { ok: boolean; message: string };
 
@@ -35,6 +36,15 @@ export async function createCategoryAction(formData: FormData): Promise<void> {
     });
     revalidatePath("/");
     revalidatePath("/admin/categories");
+  });
+}
+
+export async function importReferenceTaxonomyAction(): Promise<void> {
+  await withGuard(async () => {
+    await importReferenceTaxonomyToDb();
+    revalidatePath("/admin/categories");
+    revalidatePath("/admin/pipeline");
+    revalidatePath("/");
   });
 }
 

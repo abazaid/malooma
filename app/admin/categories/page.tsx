@@ -1,4 +1,4 @@
-﻿import { createCategoryAction } from "@/app/admin/actions";
+import { createCategoryAction, importReferenceTaxonomyAction } from "@/app/admin/actions";
 import { contentRepository } from "@/lib/repositories/content-repository";
 
 export default async function AdminCategoriesPage() {
@@ -19,13 +19,23 @@ export default async function AdminCategoriesPage() {
         </button>
       </form>
 
+      <form action={importReferenceTaxonomyAction} className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-700">استيراد كامل التصنيفات والفروع من `reference-data` وإرجاع البنية الكبيرة كما كانت.</p>
+          <button type="submit" className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">
+            استيراد كل التصنيفات الآن
+          </button>
+        </div>
+      </form>
+
       <section className="space-y-4">
         {categories.map((category) => (
           <article key={category.slug} className="rounded-2xl border border-slate-200 bg-white p-5">
             <h3 className="text-xl font-bold text-slate-900">{category.name}</h3>
             <p className="mt-1 text-xs text-slate-500">slug: {category.slug}</p>
+            <p className="mt-1 text-xs text-slate-600">عدد الفروع: {category.subcategories.length.toLocaleString("ar-SA")}</p>
             <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {category.subcategories.slice(0, 18).map((subcategory) => (
+              {category.subcategories.map((subcategory) => (
                 <li key={subcategory.slug} className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700">
                   {subcategory.name}
                 </li>
