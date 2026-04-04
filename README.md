@@ -127,12 +127,12 @@ npm run build
 8. Internal linking (3–8 links)
 9. AI cover image generation per article (OpenAI image model)
 10. Random author assignment from AI-generated pool (20+ authors)
-11. Scheduling (10/day)
+11. Scheduling (5/day, single cluster mode)
 12. Publishing + content memory update
 
 ## أوامر التشغيل
 ```bash
-# 1) إدخال المواضيع + تنظيف + كتابة + جدولة
+# 1) إدخال المواضيع + تنظيف + كتابة Cluster واحد (1 رئيسي + 4 داعمة) + جدولة
 npm run pipeline:run
 
 # 2) نشر المقالات المجدولة التي حان وقتها
@@ -157,6 +157,11 @@ npm run pipeline:reset
 ## Cron مقترح (Coolify)
 - `pipeline:run` مرة يوميًا (مثل 01:00)
 - `pipeline:publish` كل 15 دقيقة
+
+## سياسة النشر الحالية
+- حد يومي ثابت: `5` مقالات فقط.
+- النمط: `Cluster Mode` فقط (موضوع محوري واحد + 4 مقالات داعمة).
+- عند فشل تكوين Cluster كامل: لا يتم النشر ولا الجدولة.
 
 ## ملاحظة
 المواضيع المصدرية تُستخدم كأفكار فقط، والمحتوى الناتج يتم توليده أصليًا داخل المحرك.

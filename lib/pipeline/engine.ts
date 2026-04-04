@@ -13,8 +13,11 @@ import { generateArticlePackageWithAI } from "@/lib/pipeline/ai-generator";
 import { slugifyArabic } from "@/lib/slug";
 import { ensureContributorPools, pickRandomItem } from "@/lib/pipeline/author-pool";
 import { generateCoverImage } from "@/lib/pipeline/cover-image";
+import { jaccardSimilarity } from "@/lib/pipeline/text-utils";
 
 const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL ?? "https://malooma.org";
+const CLUSTER_SIZE = 5;
+const SUPPORTING_SIZE = 4;
 
 function buildExcerpt(topic: string, intent: string) {
   return `دليل شامل حول ${topic}. ${intent}`.slice(0, 280);
@@ -310,7 +313,7 @@ async function processSingleTopic(topicId: string) {
     summary: article.excerpt,
   });
 
-  return { articleId: article.id, relatedCount };
+  return { articleId: article.id, relatedCount, topicId: topic.id };
 }
 
 export async function processTopicsToDrafts(limit = 10) {
@@ -320,7 +323,7 @@ export async function processTopicsToDrafts(limit = 10) {
     take: limit,
   });
 
-  const results = [] as Array<{ articleId: string; relatedCount: number }>;
+  const results = [] as Array<{ articleId: string; relatedCount: number; topicId: string }>;
   for (const topic of topics) {
     const result = await processSingleTopic(topic.id);
     if (result) results.push(result);
@@ -329,14 +332,157 @@ export async function processTopicsToDrafts(limit = 10) {
   return { drafted: results.length, results };
 }
 
-export async function scheduleDailyPublishing(batchSize = 10) {
+async function selectDailyTopicCluster() {
+  const topics = await prisma.topicQueue.findMany({
+    where: { status: "CLEANED" },
+    orderBy: { createdAt: "asc" },
+    take: 300,
+  });
+
+  if (topics.length < CLUSTER_SIZE) return null;
+
+  for (const core of topics) {
+    const scored = topics
+      .filter((item) => item.id !== core.id)
+      .map((item) => ({
+        topic: item,
+        score: jaccardSimilarity(core.normalizedTitle, item.normalizedTitle),
+      }))
+      .filter((item) => item.score >= 0.2)
+      .sort((a, b) => (b.score === a.score ? +new Date(a.topic.createdAt) - +new Date(b.topic.createdAt) : b.score - a.score));
+
+    const supporting = scored.slice(0, SUPPORTING_SIZE).map((item) => item.topic);
+    if (supporting.length === SUPPORTING_SIZE) {
+      return { coreTopic: core, supportingTopics: supporting };
+    }
+  }
+
+  return null;
+}
+
+async function attachClusterLinks(input: {
+  articleIds: string[];
+}) {
+  const articles = await prisma.article.findMany({
+    where: { id: { in: input.articleIds } },
+    select: { id: true, slug: true, title: true },
+  });
+
+  const toAnchor = (title: string) => title.replace(/^ما\s+هو\s+/g, "").replace(/^كيفية\s+/g, "").trim();
+  for (const article of articles) {
+    const peers = articles.filter((item) => item.id !== article.id);
+    for (const peer of peers) {
+      const score = Math.max(0.7, jaccardSimilarity(article.title, peer.title));
+      await prisma.articleRelated.upsert({
+        where: {
+          articleId_relatedArticleId: {
+            articleId: article.id,
+            relatedArticleId: peer.id,
+          },
+        },
+        create: {
+          articleId: article.id,
+          relatedArticleId: peer.id,
+          relevanceScore: score,
+        },
+        update: {
+          relevanceScore: score,
+        },
+      });
+    }
+
+    const lines = peers.map((peer) => `- [${toAnchor(peer.title)}](/articles/${peer.slug})`);
+    const existing = await prisma.articleSection.findFirst({
+      where: { articleId: article.id, blockType: "related_articles" },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.articleSection.update({
+        where: { id: existing.id },
+        data: {
+          heading: "مقالات مرتبطة ضمن نفس المحور",
+          content: lines.join("\n"),
+        },
+      });
+    } else {
+      await prisma.articleSection.create({
+        data: {
+          articleId: article.id,
+          orderNo: 999,
+          blockType: "related_articles",
+          heading: "مقالات مرتبطة ضمن نفس المحور",
+          content: lines.join("\n"),
+        },
+      });
+    }
+  }
+}
+
+async function processDailyClusterToDrafts() {
+  const cluster = await selectDailyTopicCluster();
+  if (!cluster) {
+    return {
+      drafted: 0,
+      clusterMode: true,
+      reason: "No coherent 5-topic cluster found. Pipeline aborted by policy.",
+      results: [],
+    };
+  }
+
+  const orderedTopics = [cluster.coreTopic, ...cluster.supportingTopics];
+  const results: Array<{ articleId: string; relatedCount: number; topicId: string }> = [];
+
+  for (const topic of orderedTopics) {
+    const result = await processSingleTopic(topic.id);
+    if (result) results.push(result);
+  }
+
+  if (results.length !== CLUSTER_SIZE) {
+    const generatedArticleIds = results.map((item) => item.articleId);
+    if (generatedArticleIds.length > 0) {
+      await prisma.article.deleteMany({ where: { id: { in: generatedArticleIds } } });
+    }
+
+    await prisma.topicQueue.updateMany({
+      where: { id: { in: orderedTopics.map((item) => item.id) } },
+      data: {
+        status: "CLEANED",
+        errorMessage: "Cluster not completed (must be exactly 5 linked articles).",
+      },
+    });
+
+    return {
+      drafted: 0,
+      clusterMode: true,
+      reason: "Cluster generation incomplete. All generated drafts rolled back.",
+      results: [],
+    };
+  }
+
+  await attachClusterLinks({ articleIds: results.map((item) => item.articleId) });
+
+  return {
+    drafted: results.length,
+    clusterMode: true,
+    coreTopic: cluster.coreTopic.rawTitle,
+    supportingTopics: cluster.supportingTopics.map((item) => item.rawTitle),
+    results,
+  };
+}
+
+export async function scheduleDailyPublishing(batchSize = 5, articleIds?: string[]) {
+  const cappedBatchSize = Math.min(5, Math.max(1, batchSize));
   const nextDay = getNextPublishingDay();
-  const slots = buildDailyPublishingSlots(nextDay, batchSize);
+  const slots = buildDailyPublishingSlots(nextDay, cappedBatchSize);
 
   const articles = await prisma.article.findMany({
-    where: { status: "DRAFT" },
+    where: {
+      status: "DRAFT",
+      ...(articleIds && articleIds.length > 0 ? { id: { in: articleIds } } : {}),
+    },
     orderBy: { createdAt: "asc" },
-    take: batchSize,
+    take: cappedBatchSize,
   });
 
   for (const [index, article] of articles.entries()) {
@@ -362,7 +508,7 @@ export async function scheduleDailyPublishing(batchSize = 10) {
     data: {
       runAt: nextDay,
       status: "PENDING",
-      batchSize,
+      batchSize: cappedBatchSize,
       completedCount: 0,
     },
   });
@@ -370,14 +516,15 @@ export async function scheduleDailyPublishing(batchSize = 10) {
   return { scheduled: articles.length, day: nextDay.toISOString() };
 }
 
-export async function publishDueArticles(limit = 10) {
+export async function publishDueArticles(limit = 5) {
+  const cappedLimit = Math.min(5, Math.max(1, limit));
   const due = await prisma.article.findMany({
     where: {
       status: "SCHEDULED",
       publishedAt: { lte: new Date() },
     },
     orderBy: { publishedAt: "asc" },
-    take: limit,
+    take: cappedLimit,
   });
 
   let published = 0;
@@ -425,8 +572,8 @@ export async function runContentPipeline(input?: {
   scheduleBatch?: number;
 }) {
   const intake = input?.intake ?? true;
-  const dailyLimit = input?.dailyLimit ?? 10;
-  const scheduleBatch = input?.scheduleBatch ?? 10;
+  const enforcedClusterSize = CLUSTER_SIZE;
+  const scheduleBatch = Math.min(enforcedClusterSize, Math.max(enforcedClusterSize, input?.scheduleBatch ?? enforcedClusterSize));
 
   const report: Record<string, unknown> = {};
 
@@ -434,9 +581,24 @@ export async function runContentPipeline(input?: {
     report.intake = await intakeTopicsFromReference();
   }
 
+  report.policy = {
+    mode: "cluster",
+    dailyArticles: enforcedClusterSize,
+  };
+
   report.cleaning = await cleanAndDedupeTopics(1500);
-  report.drafting = await processTopicsToDrafts(dailyLimit);
-  report.scheduling = await scheduleDailyPublishing(scheduleBatch);
+  const clusterDrafting = await processDailyClusterToDrafts();
+  report.drafting = clusterDrafting;
+
+  if (clusterDrafting.drafted === CLUSTER_SIZE) {
+    report.scheduling = await scheduleDailyPublishing(scheduleBatch, clusterDrafting.results.map((item) => item.articleId));
+  } else {
+    report.scheduling = {
+      scheduled: 0,
+      skipped: true,
+      reason: "Cluster policy: scheduling skipped because complete 5-article cluster was not generated.",
+    };
+  }
 
   return report;
 }

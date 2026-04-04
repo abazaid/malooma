@@ -1,7 +1,7 @@
 ﻿import { publishDueArticles } from "@/lib/pipeline/engine";
 
 async function main() {
-  const report = await publishDueArticles(20);
+  const report = await publishDueArticles(5);
   console.log("Publish report:\n", JSON.stringify(report, null, 2));
 }
 

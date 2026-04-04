@@ -2,10 +2,10 @@
 
 async function main() {
   console.log("[cron] run pipeline");
-  await runContentPipeline({ intake: true, dailyLimit: 10, scheduleBatch: 10 });
+  await runContentPipeline({ intake: true, dailyLimit: 5, scheduleBatch: 5 });
 
   console.log("[cron] publish due");
-  await publishDueArticles(20);
+  await publishDueArticles(5);
 }
 
 main().catch((error) => {
