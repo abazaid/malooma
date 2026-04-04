@@ -382,8 +382,8 @@ export async function processTopicsToDrafts(limit = 10, runKey?: string) {
 async function selectDailyTopicCluster() {
   const topics = await prisma.topicQueue.findMany({
     where: { status: "CLEANED" },
-    orderBy: { createdAt: "asc" },
-    take: 300,
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    take: 1000,
   });
 
   if (topics.length < CLUSTER_SIZE) return null;
