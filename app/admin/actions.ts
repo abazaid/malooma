@@ -342,7 +342,7 @@ export async function importAllReferenceTopicsAction(): Promise<void> {
 
 export async function runPipelineNowAction(): Promise<void> {
   try {
-    await runContentPipeline({ intake: false, dailyLimit: 5, scheduleBatch: 5 });
+    await runContentPipeline({ intake: false, dailyLimit: 10, scheduleBatch: 10 });
     revalidatePath("/admin/pipeline");
     revalidatePath("/admin");
     redirect(`/admin/pipeline?notice=${encodeURIComponent("تم بدء تشغيل الـ Pipeline")}`);
@@ -354,10 +354,10 @@ export async function runPipelineNowAction(): Promise<void> {
 export async function startManualPublishingSystemAction(): Promise<void> {
   try {
     // Manual run outside cron. This does not alter cron schedules.
-    await runContentPipeline({ intake: false, dailyLimit: 5, scheduleBatch: 5 });
+    await runContentPipeline({ intake: false, dailyLimit: 10, scheduleBatch: 10 });
     revalidatePath("/admin/pipeline");
     revalidatePath("/admin");
-    redirect(`/admin/pipeline?notice=${encodeURIComponent("بدأ نظام النشر الآن (Cluster: 5 مقالات)")}`);
+    redirect(`/admin/pipeline?notice=${encodeURIComponent("بدأ نظام النشر الآن (2 Clusters = 10 مقالات)")}`);
   } catch {
     redirect(`/admin/pipeline?error=${encodeURIComponent("فشل بدء نظام النشر. تحقق من السجلات والبيئة")}`);
   }
@@ -365,8 +365,8 @@ export async function startManualPublishingSystemAction(): Promise<void> {
 
 export async function publishDueNowAction(): Promise<void> {
   try {
-    const due = await publishDueArticles(5);
-    const forced = due.published === 0 ? await publishScheduledNow(5) : { published: 0 };
+    const due = await publishDueArticles(10);
+    const forced = due.published === 0 ? await publishScheduledNow(10) : { published: 0 };
     const total = due.published + forced.published;
 
     revalidatePath("/admin/pipeline");
@@ -385,7 +385,7 @@ export async function publishDueNowAction(): Promise<void> {
 
 export async function processImagesNowAction(): Promise<void> {
   try {
-    const result = await processPendingImages(5);
+    const result = await processPendingImages(10);
     revalidatePath("/admin/pipeline");
     revalidatePath("/");
     redirect(`/admin/pipeline?notice=${encodeURIComponent(`تمت معالجة ${result.generated} صور`)}`);

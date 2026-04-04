@@ -2,13 +2,13 @@ import { processPendingImages, publishDueArticles, runContentPipeline } from "@/
 
 async function main() {
   console.log("[cron] run pipeline");
-  await runContentPipeline({ intake: false, dailyLimit: 5, scheduleBatch: 5 });
+  await runContentPipeline({ intake: false, dailyLimit: 10, scheduleBatch: 10 });
 
   console.log("[cron] publish due");
-  await publishDueArticles(5);
+  await publishDueArticles(10);
 
   console.log("[cron] process images");
-  await processPendingImages(5);
+  await processPendingImages(10);
 }
 
 main().catch((error) => {

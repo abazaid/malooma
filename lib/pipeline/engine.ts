@@ -19,6 +19,7 @@ import { logPipelineEvent } from "@/lib/pipeline/events";
 const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL ?? "https://malooma.org";
 const CLUSTER_SIZE = 5;
 const SUPPORTING_SIZE = 4;
+const MAX_DAILY_ARTICLES = 10;
 
 function buildExcerpt(topic: string, intent: string) {
   return `دليل شامل حول ${topic}. ${intent}`.slice(0, 280);
@@ -612,7 +613,7 @@ export async function scheduleDailyPublishing(batchSize = 5, articleIds?: string
 }
 
 export async function publishDueArticles(limit = 5, runKey?: string) {
-  const cappedLimit = Math.min(5, Math.max(1, limit));
+  const cappedLimit = Math.min(MAX_DAILY_ARTICLES, Math.max(1, limit));
   const due = await prisma.article.findMany({
     where: {
       status: "SCHEDULED",
@@ -671,7 +672,7 @@ export async function publishDueArticles(limit = 5, runKey?: string) {
 }
 
 export async function publishScheduledNow(limit = 5, runKey?: string) {
-  const cappedLimit = Math.min(5, Math.max(1, limit));
+  const cappedLimit = Math.min(MAX_DAILY_ARTICLES, Math.max(1, limit));
   const scheduled = await prisma.article.findMany({
     where: { status: "SCHEDULED" },
     orderBy: [{ publishedAt: "asc" }, { createdAt: "asc" }],
@@ -728,7 +729,7 @@ export async function processPendingImages(limit = 5, runKey?: string) {
       },
     },
     orderBy: { createdAt: "asc" },
-    take: Math.min(10, Math.max(1, limit)),
+    take: Math.min(MAX_DAILY_ARTICLES, Math.max(1, limit)),
     include: {
       article: {
         select: {
@@ -785,8 +786,16 @@ export async function runContentPipeline(input?: {
 }) {
   const runKey = `run-${new Date().toISOString()}`;
   const intake = input?.intake ?? true;
-  const enforcedClusterSize = CLUSTER_SIZE;
-  const scheduleBatch = Math.min(enforcedClusterSize, Math.max(enforcedClusterSize, input?.scheduleBatch ?? enforcedClusterSize));
+  const normalizedDailyLimit = Math.min(
+    MAX_DAILY_ARTICLES,
+    Math.max(CLUSTER_SIZE, input?.dailyLimit ?? MAX_DAILY_ARTICLES),
+  );
+  const clusterRuns = Math.max(1, Math.floor(normalizedDailyLimit / CLUSTER_SIZE));
+  const targetArticles = clusterRuns * CLUSTER_SIZE;
+  const scheduleBatch = Math.min(
+    targetArticles,
+    Math.max(CLUSTER_SIZE, input?.scheduleBatch ?? targetArticles),
+  );
 
   const report: Record<string, unknown> = {};
 
@@ -796,24 +805,34 @@ export async function runContentPipeline(input?: {
 
   report.policy = {
     mode: "cluster",
-    dailyArticles: enforcedClusterSize,
+    dailyArticles: targetArticles,
+    clusterSize: CLUSTER_SIZE,
+    clusterRuns,
   };
 
   report.cleaning = await cleanAndDedupeTopics(1500);
-  const clusterDrafting = await processDailyClusterToDrafts(runKey);
-  report.drafting = clusterDrafting;
+  const draftingResults: Awaited<ReturnType<typeof processDailyClusterToDrafts>>[] = [];
+  const draftedArticleIds: string[] = [];
 
-  if (clusterDrafting.drafted === CLUSTER_SIZE) {
-    report.scheduling = await scheduleDailyPublishing(
-      scheduleBatch,
-      clusterDrafting.results.map((item) => item.articleId),
-      runKey,
-    );
+  for (let i = 0; i < clusterRuns; i += 1) {
+    const clusterDrafting = await processDailyClusterToDrafts(runKey);
+    draftingResults.push(clusterDrafting);
+    if (clusterDrafting.drafted !== CLUSTER_SIZE) break;
+    draftedArticleIds.push(...clusterDrafting.results.map((item) => item.articleId));
+  }
+
+  report.drafting = {
+    runs: draftingResults,
+    drafted: draftedArticleIds.length,
+  };
+
+  if (draftedArticleIds.length > 0) {
+    report.scheduling = await scheduleDailyPublishing(scheduleBatch, draftedArticleIds, runKey);
   } else {
     report.scheduling = {
       scheduled: 0,
       skipped: true,
-      reason: "Cluster policy: scheduling skipped because complete 5-article cluster was not generated.",
+      reason: "Cluster policy: scheduling skipped because no complete 5-article cluster was generated.",
     };
   }
 

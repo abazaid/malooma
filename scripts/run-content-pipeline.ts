@@ -1,7 +1,7 @@
 ﻿import { runContentPipeline } from "@/lib/pipeline/engine";
 
 async function main() {
-  const report = await runContentPipeline({ intake: false, dailyLimit: 5, scheduleBatch: 5 });
+  const report = await runContentPipeline({ intake: false, dailyLimit: 10, scheduleBatch: 10 });
   console.log("Pipeline report:\n", JSON.stringify(report, null, 2));
 }
 
