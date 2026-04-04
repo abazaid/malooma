@@ -95,6 +95,22 @@ const ARTICLE_IMAGE = "https://images.unsplash.com/photo-1454165804606-c3d57bc86
 
 const PAGE_SIZE = 24;
 
+function normalizeIncomingSlug(value: string) {
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  })();
+
+  return decoded.trim().replaceAll("_", "-").toLowerCase().normalize("NFC");
+}
+
+function slugEquals(a: string, b: string) {
+  return normalizeIncomingSlug(a) === normalizeIncomingSlug(b);
+}
+
 function paginate<T>(items: T[], page: number, pageSize = PAGE_SIZE) {
   const safePage = Math.max(1, page);
   const start = (safePage - 1) * pageSize;
@@ -270,23 +286,23 @@ export const contentRepository = {
 
   getCategoryBySlug: cache(async (categorySlug: string) => {
     const memory = await buildMemoryDataset();
-    return memory.mainCategories.find((item) => item.slug === categorySlug) ?? null;
+    return memory.mainCategories.find((item) => slugEquals(item.slug, categorySlug)) ?? null;
   }),
 
   getSubcategoryBySlug: cache(async (categorySlug: string, subcategorySlug: string) => {
     const category = await contentRepository.getCategoryBySlug(categorySlug);
-    return category?.subcategories.find((item) => item.slug === subcategorySlug) ?? null;
+    return category?.subcategories.find((item) => slugEquals(item.slug, subcategorySlug)) ?? null;
   }),
 
   getArticlesByCategory: cache(async (categorySlug: string, page = 1) => {
     const memory = await buildMemoryDataset();
-    const filtered = memory.articles.filter((item) => item.categorySlug === categorySlug);
+    const filtered = memory.articles.filter((item) => slugEquals(item.categorySlug, categorySlug));
     return paginate(filtered, page);
   }),
 
   getArticlesBySubcategory: cache(async (subcategorySlug: string, page = 1) => {
     const memory = await buildMemoryDataset();
-    const filtered = memory.articles.filter((item) => item.subcategorySlug === subcategorySlug);
+    const filtered = memory.articles.filter((item) => slugEquals(item.subcategorySlug, subcategorySlug));
     return paginate(filtered, page);
   }),
 
@@ -318,18 +334,18 @@ export const contentRepository = {
 
   getArticleBySlug: cache(async (slug: string): Promise<ArticleModel | null> => {
     const memory = await buildMemoryDataset();
-    const article = memory.articles.find((item) => item.slug === slug);
+    const article = memory.articles.find((item) => slugEquals(item.slug, slug));
     if (!article) return null;
     return toArticleModel(article, memory.articles);
   }),
 
   getAuthors: cache(async () => AUTHORS),
 
-  getAuthorBySlug: cache(async (slug: string) => AUTHORS.find((item) => item.slug === slug) ?? null),
+  getAuthorBySlug: cache(async (slug: string) => AUTHORS.find((item) => slugEquals(item.slug, slug)) ?? null),
 
   getArticlesByAuthor: cache(async (authorSlug: string, page = 1) => {
     const memory = await buildMemoryDataset();
-    const filtered = memory.articles.filter((item) => item.author.slug === authorSlug);
+    const filtered = memory.articles.filter((item) => slugEquals(item.author.slug, authorSlug));
     return paginate(filtered, page);
   }),
 
