@@ -1,8 +1,10 @@
-import { readdir, readFile } from "node:fs/promises";
+﻿import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { logPipelineEvent } from "@/lib/pipeline/events";
 import { hashTitle, jaccardSimilarity, normalizeTopicTitle } from "@/lib/pipeline/text-utils";
+
+const DEFAULT_REFERENCE_TOPICS_FILE = "mawdoo3_topic_links.xml";
 
 function parseTopicFromLine(line: string): string | null {
   if (!line.trim()) return null;
@@ -34,13 +36,15 @@ function extractUrls(content: string) {
   return [...urls];
 }
 
-export async function intakeTopicsFromReference(fileName = "__scan_all__") {
+export async function intakeTopicsFromReference(fileName = DEFAULT_REFERENCE_TOPICS_FILE) {
   const referenceDir = path.join(process.cwd(), "reference-data");
   const files = await readdir(referenceDir);
   const preferredFile = fileName === "__scan_all__" ? undefined : files.find((item) => item === fileName);
   const candidateFiles = preferredFile
     ? [preferredFile]
-    : files.filter((item) => item.endsWith(".txt") || item.endsWith(".xml"));
+    : fileName === "__scan_all__"
+      ? files.filter((item) => item.endsWith(".txt") || item.endsWith(".xml"))
+      : [];
 
   const uniqueByHash = new Map<
     string,
