@@ -120,13 +120,15 @@ npm run build
 1. Topic intake from `reference-data/`
 2. Cleaning + dedupe + anti-duplicate
 3. Auto classification (main/sub category)
-4. Outline generation
-5. Article writing (1200+ words)
-6. SEO optimization (slug/meta/canonical/LSI)
-7. Internal linking (3–8 links)
-8. Image prompt generation
-9. Scheduling (10/day)
-10. Publishing + content memory update
+4. Stage 1 Analysis (keyword + intent + user problem)
+5. Stage 2 Outline (H2/H3 + FAQ + logical flow)
+6. Stage 3 Execution (1200+ words, practical examples)
+7. SEO optimization (slug/meta/canonical/LSI)
+8. Internal linking (3–8 links)
+9. AI cover image generation per article (OpenAI image model)
+10. Random author assignment from AI-generated pool (20+ authors)
+11. Scheduling (10/day)
+12. Publishing + content memory update
 
 ## أوامر التشغيل
 ```bash
@@ -141,6 +143,9 @@ npm run pipeline:article -- "فوائد تنظيم الوقت في بيئة ال
 
 # 4) worker دوري (يمكن ربطه بـ Coolify cron)
 npm run pipeline:cron
+
+# 5) حذف كل المقالات/المواضيع التجريبية المولدة من الـpipeline
+npm run pipeline:reset
 ```
 
 ## جداول قاعدة البيانات المضافة

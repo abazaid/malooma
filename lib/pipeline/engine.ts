@@ -11,52 +11,10 @@ import { cleanAndDedupeTopics, intakeTopicsFromReference } from "@/lib/pipeline/
 import { writeArticleDraft } from "@/lib/pipeline/article-writer";
 import { generateArticlePackageWithAI } from "@/lib/pipeline/ai-generator";
 import { slugifyArabic } from "@/lib/slug";
+import { ensureContributorPools, pickRandomItem } from "@/lib/pipeline/author-pool";
+import { generateCoverImage } from "@/lib/pipeline/cover-image";
 
 const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL ?? "https://malooma.org";
-
-async function ensureAuthorAndReviewer() {
-  let author = await prisma.author.findFirst();
-  if (!author) {
-    const user = await prisma.user.create({
-      data: {
-        email: `auto-author-${Date.now()}@malooma.org`,
-        passwordHash: "generated",
-        fullName: "محرك المحتوى",
-        role: "AUTHOR",
-      },
-    });
-    author = await prisma.author.create({
-      data: {
-        userId: user.id,
-        slug: `المحرك-${Date.now()}`,
-        displayName: "محرك المحتوى",
-        bio: "توليد مقالات آلي مع مراجعة تحريرية.",
-      },
-    });
-  }
-
-  let reviewer = await prisma.reviewer.findFirst();
-  if (!reviewer) {
-    const user = await prisma.user.create({
-      data: {
-        email: `auto-reviewer-${Date.now()}@malooma.org`,
-        passwordHash: "generated",
-        fullName: "مراجعة آلية",
-        role: "REVIEWER",
-      },
-    });
-    reviewer = await prisma.reviewer.create({
-      data: {
-        userId: user.id,
-        slug: `مراجعة-${Date.now()}`,
-        displayName: "المراجعة التحريرية",
-        bio: "فحص جودة آلي للمحتوى قبل الجدولة.",
-      },
-    });
-  }
-
-  return { author, reviewer };
-}
 
 function buildExcerpt(topic: string, intent: string) {
   return `دليل شامل حول ${topic}. ${intent}`.slice(0, 280);
@@ -109,6 +67,7 @@ async function processSingleTopic(topicId: string) {
   let draft = writeArticleDraft(topic.rawTitle, outline);
   let aiMetaTitle = "";
   let aiMetaDescription = "";
+  let aiInternalLinkSuggestions: { anchor: string; targetTopic: string }[] = [];
 
   if (process.env.OPENAI_API_KEY) {
     const aiPackage = await generateArticlePackageWithAI({
@@ -139,6 +98,7 @@ async function processSingleTopic(topicId: string) {
 
     aiMetaTitle = aiPackage.metaTitle;
     aiMetaDescription = aiPackage.metaDescription;
+    aiInternalLinkSuggestions = aiPackage.internalLinkSuggestions;
   }
 
   const seo = optimizeSeo({
@@ -160,7 +120,9 @@ async function processSingleTopic(topicId: string) {
     return null;
   }
 
-  const { author, reviewer } = await ensureAuthorAndReviewer();
+  const contributorPools = await ensureContributorPools(20, 5);
+  const author = pickRandomItem(contributorPools.authors);
+  const reviewer = pickRandomItem(contributorPools.reviewers);
 
   const article = await prisma.article.create({
     data: {
@@ -284,10 +246,27 @@ async function processSingleTopic(topicId: string) {
     },
   });
 
+  const generatedCover = await generateCoverImage({
+    slug: article.slug,
+    prompt: imagePrompt.prompt,
+    fallbackSeed: slugifyArabic(`${mainCategory.name}-${article.slug}`),
+  });
+
+  const media = await prisma.media.create({
+    data: {
+      fileName: generatedCover.fileName,
+      mimeType: generatedCover.mimeType,
+      storageKey: generatedCover.storageKey,
+      url: generatedCover.url,
+      altText: article.title,
+    },
+  });
+
   await prisma.article.update({
     where: { id: article.id },
     data: {
       imagePrompt: imagePrompt.prompt,
+      heroMediaId: media.id,
     },
   });
 
@@ -296,6 +275,18 @@ async function processSingleTopic(topicId: string) {
     articleTitle: article.title,
     categoryId: article.categoryId,
   });
+
+  if (relatedCount === 0 && aiInternalLinkSuggestions.length > 0) {
+      await prisma.articleSection.create({
+        data: {
+          articleId: article.id,
+          orderNo: orderNo++,
+          blockType: "callout",
+          heading: "روابط داخلية مقترحة لإضافتها لاحقًا",
+          content: aiInternalLinkSuggestions.map((item) => `- ${item.anchor} → ${item.targetTopic}`).join("\n"),
+        },
+      });
+  }
 
   await prisma.topicQueue.update({
     where: { id: topic.id },

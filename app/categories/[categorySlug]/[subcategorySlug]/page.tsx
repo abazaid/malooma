@@ -40,7 +40,7 @@ export default async function SubcategoryPage({ params, searchParams }: Props) {
   const [category, subcategory, articles] = await Promise.all([
     contentRepository.getCategoryBySlug(categorySlug),
     contentRepository.getSubcategoryBySlug(categorySlug, subcategorySlug),
-    contentRepository.getArticlesBySubcategory(subcategorySlug, page),
+    contentRepository.getArticlesBySubcategory(subcategorySlug, page, categorySlug),
   ]);
 
   if (!category || !subcategory) notFound();

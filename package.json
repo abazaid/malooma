@@ -14,7 +14,8 @@
     "pipeline:run": "tsx scripts/run-content-pipeline.ts",
     "pipeline:publish": "tsx scripts/publish-due.ts",
     "pipeline:article": "tsx scripts/generate-one-article.ts",
-    "pipeline:cron": "tsx scripts/cron-worker.ts"
+    "pipeline:cron": "tsx scripts/cron-worker.ts",
+    "pipeline:reset": "tsx scripts/reset-generated-content.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",

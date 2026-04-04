@@ -91,8 +91,6 @@ const STATIC_PAGES: StaticPageModel[] = [
   },
 ];
 
-const ARTICLE_IMAGE = "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80";
-
 const PAGE_SIZE = 24;
 
 function normalizeIncomingSlug(value: string) {
@@ -111,6 +109,11 @@ function slugEquals(a: string, b: string) {
   return normalizeIncomingSlug(a) === normalizeIncomingSlug(b);
 }
 
+function buildSeedImage(seed: string) {
+  const safe = normalizeIncomingSlug(seed).replace(/\s+/g, "-");
+  return `https://picsum.photos/seed/${encodeURIComponent(safe || "malooma")}/1600/900`;
+}
+
 function paginate<T>(items: T[], page: number, pageSize = PAGE_SIZE) {
   const safePage = Math.max(1, page);
   const start = (safePage - 1) * pageSize;
@@ -121,6 +124,72 @@ function paginate<T>(items: T[], page: number, pageSize = PAGE_SIZE) {
     totalPages: Math.max(1, Math.ceil(items.length / pageSize)),
     items: items.slice(start, start + pageSize),
   };
+}
+
+function toCardFromDbArticle(article: {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  publishedAt: Date | null;
+  createdAt: Date;
+  readingMinutes: number;
+  author: { id: string; slug: string; displayName: string; bio: string | null };
+  category: { name: string; slug: string; parent: { name: string; slug: string } | null };
+  heroMedia: { url: string } | null;
+}): ArticleCardModel {
+  return {
+    id: article.id,
+    title: article.title,
+    slug: article.slug,
+    excerpt: article.excerpt,
+    categoryName: article.category.parent?.name ?? article.category.name,
+    categorySlug: article.category.parent?.slug ?? article.category.slug,
+    subcategoryName: article.category.name,
+    subcategorySlug: article.category.slug,
+    publishedAt: (article.publishedAt ?? article.createdAt).toISOString(),
+    readingMinutes: article.readingMinutes,
+    heroImage: article.heroMedia?.url ?? buildSeedImage(article.slug),
+    author: {
+      id: article.author.id,
+      slug: article.author.slug,
+      name: article.author.displayName,
+      bio: article.author.bio ?? "",
+    },
+  };
+}
+
+async function loadDbMainCategories(): Promise<MainCategory[] | null> {
+  if (!process.env.DATABASE_URL) return null;
+  try {
+    const mainCategories = await prisma.category.findMany({
+      where: { level: 1, isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      include: {
+        children: {
+          where: { level: 2, isActive: true },
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        },
+      },
+    });
+
+    if (mainCategories.length === 0) return null;
+
+    return mainCategories.map((main) => ({
+      id: main.id,
+      name: main.name,
+      slug: main.slug,
+      description: main.description ?? `دليل شامل ضمن قسم ${main.name}.`,
+      subcategories: main.children.map((child) => ({
+        id: child.id,
+        name: child.name,
+        slug: child.slug,
+        parentSlug: main.slug,
+      })),
+    }));
+  } catch {
+    return null;
+  }
 }
 
 const buildMemoryDataset = cache(async () => {
@@ -178,7 +247,7 @@ const buildMemoryDataset = cache(async () => {
       subcategorySlug: sub.slug,
       publishedAt: published.toISOString(),
       readingMinutes: 4 + (index % 7),
-      heroImage: ARTICLE_IMAGE,
+      heroImage: buildSeedImage(seed.slug),
       author,
     };
   });
@@ -270,6 +339,36 @@ function toArticleModel(base: ArticleCardModel, relatedPool: ArticleCardModel[])
 
 export const contentRepository = {
   getHomeData: cache(async () => {
+    if (process.env.DATABASE_URL) {
+      try {
+        const [categories, latestDb] = await Promise.all([
+          loadDbMainCategories(),
+          prisma.article.findMany({
+            where: { status: "PUBLISHED" },
+            orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+            take: 120,
+            include: {
+              author: true,
+              category: { include: { parent: true } },
+              heroMedia: true,
+            },
+          }),
+        ]);
+
+        if (categories && latestDb.length > 0) {
+          const cards = latestDb.map((article) => toCardFromDbArticle(article));
+          return {
+            trending: cards.slice(0, 8),
+            popular: cards.slice(8, 32),
+            latest: cards.slice(0, 30),
+            categories,
+          };
+        }
+      } catch {
+        // fallback below
+      }
+    }
+
     const memory = await buildMemoryDataset();
     return {
       trending: memory.trending,
@@ -280,11 +379,19 @@ export const contentRepository = {
   }),
 
   getMainCategories: cache(async () => {
+    const dbCategories = await loadDbMainCategories();
+    if (dbCategories) return dbCategories;
+
     const memory = await buildMemoryDataset();
     return memory.mainCategories;
   }),
 
   getCategoryBySlug: cache(async (categorySlug: string) => {
+    const dbCategories = await loadDbMainCategories();
+    if (dbCategories) {
+      return dbCategories.find((item) => slugEquals(item.slug, categorySlug)) ?? null;
+    }
+
     const memory = await buildMemoryDataset();
     return memory.mainCategories.find((item) => slugEquals(item.slug, categorySlug)) ?? null;
   }),
@@ -295,18 +402,110 @@ export const contentRepository = {
   }),
 
   getArticlesByCategory: cache(async (categorySlug: string, page = 1) => {
+    if (process.env.DATABASE_URL) {
+      try {
+        const category = await prisma.category.findFirst({
+          where: {
+            level: 1,
+            slug: { equals: normalizeIncomingSlug(categorySlug), mode: "insensitive" },
+          },
+          include: { children: { where: { level: 2 }, select: { id: true } } },
+        });
+
+        if (category) {
+          const categoryIds = category.children.map((child) => child.id);
+          const dbArticles = await prisma.article.findMany({
+            where: {
+              status: "PUBLISHED",
+              categoryId: { in: categoryIds.length > 0 ? categoryIds : [category.id] },
+            },
+            orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+            include: {
+              author: true,
+              category: { include: { parent: true } },
+              heroMedia: true,
+            },
+          });
+
+          return paginate(dbArticles.map((article) => toCardFromDbArticle(article)), page);
+        }
+      } catch {
+        // fallback below
+      }
+    }
+
     const memory = await buildMemoryDataset();
     const filtered = memory.articles.filter((item) => slugEquals(item.categorySlug, categorySlug));
     return paginate(filtered, page);
   }),
 
-  getArticlesBySubcategory: cache(async (subcategorySlug: string, page = 1) => {
+  getArticlesBySubcategory: cache(async (subcategorySlug: string, page = 1, categorySlug?: string) => {
+    if (process.env.DATABASE_URL) {
+      try {
+        const whereCategory: {
+          level: number;
+          slug: { equals: string; mode: "insensitive" };
+          parentId?: string;
+        } = {
+          level: 2,
+          slug: { equals: normalizeIncomingSlug(subcategorySlug), mode: "insensitive" },
+        };
+
+        if (categorySlug) {
+          const parent = await prisma.category.findFirst({
+            where: {
+              level: 1,
+              slug: { equals: normalizeIncomingSlug(categorySlug), mode: "insensitive" },
+            },
+            select: { id: true },
+          });
+          if (parent) whereCategory.parentId = parent.id;
+        }
+
+        const subcategory = await prisma.category.findFirst({ where: whereCategory, select: { id: true } });
+        if (subcategory) {
+          const dbArticles = await prisma.article.findMany({
+            where: {
+              status: "PUBLISHED",
+              categoryId: subcategory.id,
+            },
+            orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+            include: {
+              author: true,
+              category: { include: { parent: true } },
+              heroMedia: true,
+            },
+          });
+          return paginate(dbArticles.map((article) => toCardFromDbArticle(article)), page);
+        }
+      } catch {
+        // fallback below
+      }
+    }
+
     const memory = await buildMemoryDataset();
     const filtered = memory.articles.filter((item) => slugEquals(item.subcategorySlug, subcategorySlug));
     return paginate(filtered, page);
   }),
 
   getLatestArticles: cache(async (page = 1) => {
+    if (process.env.DATABASE_URL) {
+      try {
+        const dbArticles = await prisma.article.findMany({
+          where: { status: "PUBLISHED" },
+          orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+          include: {
+            author: true,
+            category: { include: { parent: true } },
+            heroMedia: true,
+          },
+        });
+        if (dbArticles.length > 0) return paginate(dbArticles.map((article) => toCardFromDbArticle(article)), page);
+      } catch {
+        // fallback below
+      }
+    }
+
     const memory = await buildMemoryDataset();
     return paginate(
       [...memory.articles].sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt)),
@@ -315,11 +514,59 @@ export const contentRepository = {
   }),
 
   getPopularArticles: cache(async (page = 1) => {
+    if (process.env.DATABASE_URL) {
+      try {
+        const dbArticles = await prisma.article.findMany({
+          where: { status: "PUBLISHED" },
+          orderBy: [{ updatedAt: "desc" }, { publishedAt: "desc" }],
+          include: {
+            author: true,
+            category: { include: { parent: true } },
+            heroMedia: true,
+          },
+          take: 150,
+        });
+        if (dbArticles.length > 0) return paginate(dbArticles.map((article) => toCardFromDbArticle(article)), page);
+      } catch {
+        // fallback below
+      }
+    }
+
     const memory = await buildMemoryDataset();
     return paginate([...memory.popular, ...memory.articles.slice(40, 110)], page);
   }),
 
   searchArticles: cache(async (query: string, page = 1) => {
+    if (process.env.DATABASE_URL) {
+      try {
+        const normalizedQuery = query.trim();
+        const dbArticles = await prisma.article.findMany({
+          where: {
+            status: "PUBLISHED",
+            OR: normalizedQuery
+              ? [
+                  { title: { contains: normalizedQuery, mode: "insensitive" } },
+                  { excerpt: { contains: normalizedQuery, mode: "insensitive" } },
+                ]
+              : undefined,
+          },
+          orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+          include: {
+            author: true,
+            category: { include: { parent: true } },
+            heroMedia: true,
+          },
+          take: normalizedQuery ? 400 : 150,
+        });
+
+        if (dbArticles.length > 0) {
+          return paginate(dbArticles.map((article) => toCardFromDbArticle(article)), page);
+        }
+      } catch {
+        // fallback below
+      }
+    }
+
     const q = query.trim().toLowerCase();
     const memory = await buildMemoryDataset();
     if (!q) return paginate(memory.articles.slice(0, 120), page);
@@ -337,6 +584,7 @@ export const contentRepository = {
       try {
         const dbArticle = await prisma.article.findFirst({
           where: {
+            status: "PUBLISHED",
             slug: {
               equals: normalizeIncomingSlug(slug),
               mode: "insensitive",
@@ -346,6 +594,7 @@ export const contentRepository = {
             author: true,
             reviewer: true,
             category: { include: { parent: true } },
+            heroMedia: true,
             sections: true,
             faqs: true,
             sources: true,
@@ -355,6 +604,7 @@ export const contentRepository = {
                   include: {
                     author: true,
                     category: { include: { parent: true } },
+                    heroMedia: true,
                   },
                 },
               },
@@ -379,7 +629,7 @@ export const contentRepository = {
               subcategorySlug: related.category.slug,
               publishedAt: (related.publishedAt ?? related.createdAt).toISOString(),
               readingMinutes: related.readingMinutes,
-              heroImage: ARTICLE_IMAGE,
+              heroImage: related.heroMedia?.url ?? buildSeedImage(related.slug),
               author: {
                 id: related.author.id,
                 slug: related.author.slug,
@@ -401,7 +651,7 @@ export const contentRepository = {
             publishedAt: (dbArticle.publishedAt ?? dbArticle.createdAt).toISOString(),
             updatedAt: dbArticle.updatedAt.toISOString(),
             readingMinutes: dbArticle.readingMinutes,
-            heroImage: ARTICLE_IMAGE,
+            heroImage: dbArticle.heroMedia?.url ?? buildSeedImage(dbArticle.slug),
             author: {
               id: dbArticle.author.id,
               slug: dbArticle.author.slug,
@@ -461,6 +711,36 @@ export const contentRepository = {
   getStaticPage: cache(async (slug: string) => STATIC_PAGES.find((page) => page.slug === slug) ?? null),
 
   getSitemapPayload: cache(async () => {
+    if (process.env.DATABASE_URL) {
+      try {
+        const [categories, articles] = await Promise.all([
+          loadDbMainCategories(),
+          prisma.article.findMany({
+            where: { status: "PUBLISHED" },
+            select: { slug: true, heroMedia: { select: { url: true } } },
+          }),
+        ]);
+
+        if (categories) {
+          const categoryUrls = categories.flatMap((main) => [
+            absoluteUrl(`/categories/${main.slug}`),
+            ...main.subcategories.map((sub) => absoluteUrl(`/categories/${main.slug}/${sub.slug}`)),
+          ]);
+
+          const articleUrls = articles.map((article) => absoluteUrl(`/articles/${article.slug}`));
+          const imageUrls = articles.map((article) => article.heroMedia?.url).filter((url): url is string => Boolean(url));
+
+          return {
+            categories: categoryUrls,
+            articles: articleUrls,
+            images: imageUrls,
+          };
+        }
+      } catch {
+        // fallback below
+      }
+    }
+
     const memory = await buildMemoryDataset();
     const categories = memory.mainCategories.flatMap((main) => [
       absoluteUrl(`/categories/${main.slug}`),
