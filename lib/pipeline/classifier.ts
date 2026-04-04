@@ -18,6 +18,30 @@ const CATEGORY_HINTS: Record<string, string[]> = {
   "فنون": ["موسيقى", "فن", "رسم", "شعر", "أدب"],
 };
 
+async function ensureBaseMainCategories() {
+  const baseNames = Object.keys(CATEGORY_HINTS);
+  const existing = await prisma.category.findMany({
+    where: { level: 1 },
+    select: { slug: true },
+  });
+  const existingSlugs = new Set(existing.map((item) => item.slug));
+
+  for (const [index, name] of baseNames.entries()) {
+    const slug = slugifyArabic(name);
+    if (existingSlugs.has(slug)) continue;
+
+    await prisma.category.create({
+      data: {
+        name,
+        slug,
+        level: 1,
+        sortOrder: index,
+        description: `قسم رئيسي تلقائي: ${name}`,
+      },
+    });
+  }
+}
+
 function scoreMainCategory(title: string, categoryName: string) {
   const tokens = tokenizeArabic(title);
   const hints = CATEGORY_HINTS[categoryName] ?? [];
@@ -42,6 +66,8 @@ function scoreSubCategory(title: string, subName: string) {
 }
 
 export async function classifyTopic(title: string): Promise<{ mainCategory: Category; subCategory: Category }> {
+  await ensureBaseMainCategories();
+
   const categories = await prisma.category.findMany({
     where: { isActive: true },
     orderBy: [{ level: "asc" }, { sortOrder: "asc" }],
