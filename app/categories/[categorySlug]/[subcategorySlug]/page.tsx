@@ -72,17 +72,24 @@ export default async function SubcategoryPage({ params, searchParams }: Props) {
           <Link href={`/categories/${category.slug}`} className="rounded border border-slate-300 px-3 py-1.5 hover:bg-slate-50">
             العودة إلى {category.name}
           </Link>
-          {category.subcategories.slice(0, 8).map((sibling) => (
-            <Link
-              key={sibling.slug}
-              href={`/categories/${category.slug}/${sibling.slug}`}
-              className={`rounded border px-3 py-1.5 ${
-                sibling.slug === subcategory.slug ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 hover:bg-slate-50"
-              }`}
-            >
-              {sibling.name}
-            </Link>
-          ))}
+          {category.subcategories.slice(0, 8).map((sibling) => {
+            const isActive = sibling.slug === subcategory.slug;
+            return (
+              <Link
+                key={sibling.slug}
+                href={`/categories/${category.slug}/${sibling.slug}`}
+                className={`rounded border px-3 py-1.5 transition-colors ${
+                  isActive
+                    ? "border-slate-900 bg-slate-900 !text-white shadow-sm"
+                    : "border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+                style={isActive ? { color: "#ffffff" } : undefined}
+                aria-current={isActive ? "page" : undefined}
+              >
+                {sibling.name}
+              </Link>
+            );
+          })}
         </div>
       </header>
 
