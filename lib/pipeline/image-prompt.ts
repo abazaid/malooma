@@ -1,6 +1,22 @@
-﻿export function generateImagePrompt(topic: string, categoryName: string) {
+﻿function normalize(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+export function generateImagePrompt(topic: string, categoryName: string) {
+  const cleanTopic = normalize(topic);
+  const cleanCategory = normalize(categoryName);
+
   return {
-    prompt: `Editorial cover illustration for an Arabic knowledge article about ${topic}, category ${categoryName}, clean composition, modern neutral palette, high detail, professional magazine style, no text, no watermark, 16:9` ,
-    negativePrompt: "text, letters, watermark, logo, blurry, low quality, distorted faces",
+    prompt: [
+      "Create a realistic editorial cover image for an Arabic knowledge blog.",
+      `Main subject must directly match this article title: \"${cleanTopic}\".`,
+      `Category context: \"${cleanCategory}\".`,
+      "Show concrete objects/scenes related to the topic only, not generic random imagery.",
+      "Professional magazine look, natural lighting, clean composition, high detail.",
+      "No text, no letters, no logos, no watermark, no collage.",
+      "16:9 horizontal frame.",
+    ].join(" "),
+    negativePrompt:
+      "text, letters, logo, watermark, unrelated subject, random stock scene, blurry, low quality, distorted anatomy, duplicated faces",
   };
 }

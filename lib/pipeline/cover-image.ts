@@ -18,10 +18,11 @@ type CoverOutput = {
 
 function buildFallbackCover(seed: string) {
   return {
-    fileName: `${seed}.jpg`,
-    mimeType: "image/jpeg",
-    storageKey: `external/picsum/${seed}`,
-    url: `https://picsum.photos/seed/${encodeURIComponent(seed)}/1600/900`,
+    fileName: `${seed}.svg`,
+    mimeType: "image/svg+xml",
+    storageKey: `external/fallback/${seed}`,
+    // Generic fallback to avoid unrelated photos when image generation fails.
+    url: `https://placehold.co/1600x900/f1f5f9/0f172a/png?text=${encodeURIComponent("Malooma")}`,
   } satisfies CoverOutput;
 }
 
@@ -30,14 +31,14 @@ export async function generateCoverImage(input: CoverInput): Promise<CoverOutput
 
   try {
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
-    const imageModel = env.OPENAI_IMAGE_MODEL || "gpt-image-1.5";
+    const imageModel = env.OPENAI_IMAGE_MODEL || "gpt-image-1";
     const params: Parameters<typeof client.images.generate>[0] = {
       model: imageModel,
       prompt: input.prompt,
       size: "1536x1024",
     };
     if (imageModel.startsWith("gpt-image-")) {
-      params.quality = "low";
+      params.quality = "medium";
     }
 
     const result = await client.images.generate(params);
