@@ -670,6 +670,56 @@ export async function publishDueArticles(limit = 5, runKey?: string) {
   return { published };
 }
 
+export async function publishScheduledNow(limit = 5, runKey?: string) {
+  const cappedLimit = Math.min(5, Math.max(1, limit));
+  const scheduled = await prisma.article.findMany({
+    where: { status: "SCHEDULED" },
+    orderBy: [{ publishedAt: "asc" }, { createdAt: "asc" }],
+    take: cappedLimit,
+  });
+
+  let published = 0;
+  for (const article of scheduled) {
+    await prisma.article.update({
+      where: { id: article.id },
+      data: {
+        status: "PUBLISHED",
+        publishedAt: new Date(),
+      },
+    });
+
+    if (article.topicId) {
+      await prisma.topicQueue.update({
+        where: { id: article.topicId },
+        data: { status: "PUBLISHED", processedAt: new Date() },
+      });
+    }
+
+    await backfillInternalLinksToNewArticle(article.id);
+    await upsertContentMemory({
+      articleId: article.id,
+      title: article.title,
+      slug: article.slug,
+      categoryPath: article.categoryId,
+      keywords: article.keywords,
+      summary: article.excerpt,
+    });
+
+    await logPipelineEvent({
+      stage: "ARTICLE_FORCE_PUBLISHED",
+      status: "SUCCESS",
+      runKey,
+      topicId: article.topicId ?? undefined,
+      articleId: article.id,
+      message: article.slug,
+    });
+
+    published += 1;
+  }
+
+  return { published };
+}
+
 export async function processPendingImages(limit = 5, runKey?: string) {
   const queue = await prisma.generatedImagePrompt.findMany({
     where: {

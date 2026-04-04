@@ -1,10 +1,11 @@
 ﻿"use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { slugifyArabic } from "@/lib/slug";
 import { enqueueManualTopic, intakeTopicsFromReference } from "@/lib/pipeline/topic-intake";
-import { processPendingImages, publishDueArticles, runContentPipeline } from "@/lib/pipeline/engine";
+import { processPendingImages, publishDueArticles, publishScheduledNow, runContentPipeline } from "@/lib/pipeline/engine";
 import { importReferenceTaxonomyToDb } from "@/lib/pipeline/taxonomy-import";
 
 type ActionResult = { ok: boolean; message: string };
@@ -207,50 +208,119 @@ export async function addTopicToQueueAction(formData: FormData): Promise<void> {
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return;
 
-  await withGuard(async () => {
+  try {
     await enqueueManualTopic(title);
     revalidatePath("/admin/pipeline");
-  });
+    redirect(`/admin/pipeline?notice=${encodeURIComponent("تمت إضافة الموضوع إلى قائمة الانتظار")}`);
+  } catch {
+    redirect(`/admin/pipeline?error=${encodeURIComponent("تعذر إضافة الموضوع. تحقق من DATABASE_URL")}`);
+  }
 }
 
 export async function importAllReferenceTopicsAction(): Promise<void> {
-  await withGuard(async () => {
+  try {
     await intakeTopicsFromReference();
     revalidatePath("/admin/pipeline");
-  });
+    redirect(`/admin/pipeline?notice=${encodeURIComponent("تم استيراد المواضيع من reference-data")}`);
+  } catch {
+    redirect(`/admin/pipeline?error=${encodeURIComponent("فشل استيراد المواضيع. تحقق من اتصال قاعدة البيانات")}`);
+  }
 }
 
 export async function runPipelineNowAction(): Promise<void> {
-  await withGuard(async () => {
+  try {
     await runContentPipeline({ intake: false, dailyLimit: 5, scheduleBatch: 5 });
     revalidatePath("/admin/pipeline");
     revalidatePath("/admin");
-  });
+    redirect(`/admin/pipeline?notice=${encodeURIComponent("تم بدء تشغيل الـ Pipeline")}`);
+  } catch {
+    redirect(`/admin/pipeline?error=${encodeURIComponent("تعذر تشغيل الـ Pipeline. راجع السجلات")}`);
+  }
 }
 
 export async function startManualPublishingSystemAction(): Promise<void> {
-  await withGuard(async () => {
+  try {
     // Manual run outside cron. This does not alter cron schedules.
     await runContentPipeline({ intake: false, dailyLimit: 5, scheduleBatch: 5 });
     revalidatePath("/admin/pipeline");
     revalidatePath("/admin");
-  });
+    redirect(`/admin/pipeline?notice=${encodeURIComponent("بدأ نظام النشر الآن (Cluster: 5 مقالات)")}`);
+  } catch {
+    redirect(`/admin/pipeline?error=${encodeURIComponent("فشل بدء نظام النشر. تحقق من السجلات والبيئة")}`);
+  }
 }
 
 export async function publishDueNowAction(): Promise<void> {
-  await withGuard(async () => {
-    await publishDueArticles(5);
+  try {
+    const due = await publishDueArticles(5);
+    const forced = due.published === 0 ? await publishScheduledNow(5) : { published: 0 };
+    const total = due.published + forced.published;
+
     revalidatePath("/admin/pipeline");
     revalidatePath("/admin");
     revalidatePath("/");
     revalidatePath("/latest");
-  });
+
+    if (total > 0) {
+      redirect(`/admin/pipeline?notice=${encodeURIComponent(`تم نشر ${total} مقالات الآن`)}`);
+    }
+    redirect(`/admin/pipeline?notice=${encodeURIComponent("لا توجد مقالات جاهزة للنشر الآن")}`);
+  } catch {
+    redirect(`/admin/pipeline?error=${encodeURIComponent("تعذر نشر المستحق الآن. تحقق من السجلات")}`);
+  }
 }
 
 export async function processImagesNowAction(): Promise<void> {
-  await withGuard(async () => {
-    await processPendingImages(5);
+  try {
+    const result = await processPendingImages(5);
     revalidatePath("/admin/pipeline");
     revalidatePath("/");
-  });
+    redirect(`/admin/pipeline?notice=${encodeURIComponent(`تمت معالجة ${result.generated} صور`)}`);
+  } catch {
+    redirect(`/admin/pipeline?error=${encodeURIComponent("فشلت معالجة الصور. تحقق من مفتاح OpenAI")}`);
+  }
+}
+
+export async function deleteTopicAction(formData: FormData): Promise<void> {
+  const topicId = String(formData.get("topicId") ?? "").trim();
+  if (!topicId) return;
+
+  try {
+    const topic = await prisma.topicQueue.findUnique({
+      where: { id: topicId },
+      include: {
+        article: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!topic) {
+      redirect(`/admin/pipeline?error=${encodeURIComponent("الموضوع غير موجود")}`);
+    }
+
+    if (topic?.article) {
+      if (topic.article.status === "PUBLISHED") {
+        await prisma.article.update({
+          where: { id: topic.article.id },
+          data: { topicId: null },
+        });
+      } else {
+        await prisma.article.delete({ where: { id: topic.article.id } });
+      }
+    }
+
+    await prisma.topicQueue.delete({ where: { id: topicId } });
+    revalidatePath("/admin/pipeline");
+    revalidatePath("/");
+    revalidatePath("/latest");
+    revalidatePath("/popular");
+    revalidateSeoPaths();
+    redirect(`/admin/pipeline?notice=${encodeURIComponent("تم حذف الموضوع بنجاح")}`);
+  } catch {
+    redirect(`/admin/pipeline?error=${encodeURIComponent("تعذر حذف الموضوع. قد يكون مرتبطًا بسجل آخر")}`);
+  }
 }

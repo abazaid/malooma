@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Prisma } from "@prisma/client";
 import {
   addTopicToQueueAction,
+  deleteTopicAction,
   importAllReferenceTopicsAction,
   processImagesNowAction,
   publishDueNowAction,
@@ -35,7 +36,15 @@ function badgeClass(status: string) {
   return STATUS_STYLES[status] ?? "bg-slate-50 text-slate-700 border-slate-200";
 }
 
-export default async function AdminPipelinePage() {
+export default async function AdminPipelinePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ notice?: string; error?: string }>;
+}) {
+  const params = await searchParams;
+  const notice = params.notice ? decodeURIComponent(params.notice) : "";
+  const error = params.error ? decodeURIComponent(params.error) : "";
+
   type RecentTopic = Prisma.TopicQueueGetPayload<{
     include: {
       article: { select: { id: true; slug: true; status: true; publishedAt: true } };
@@ -96,6 +105,11 @@ export default async function AdminPipelinePage() {
 
   return (
     <div className="space-y-5">
+      {notice ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{notice}</div>
+      ) : null}
+      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{error}</div> : null}
+
       <header className="rounded-2xl border border-slate-200 bg-white p-6">
         <h2 className="text-2xl font-black text-slate-900">مراقبة نظام إنتاج المحتوى</h2>
         <p className="mt-2 text-sm text-slate-700">عرض مباشر لحالة queue، وتتبع مراحل كل مقالة، وتشغيل يدوي للـ pipeline.</p>
@@ -178,6 +192,7 @@ export default async function AdminPipelinePage() {
                 <th className="px-2 py-2">المقال</th>
                 <th className="px-2 py-2">الإضافة</th>
                 <th className="px-2 py-2">المعالجة</th>
+                <th className="px-2 py-2">إجراء</th>
               </tr>
             </thead>
             <tbody>
@@ -201,6 +216,17 @@ export default async function AdminPipelinePage() {
                   </td>
                   <td className="px-2 py-2 text-xs text-slate-600">{formatDate(topic.createdAt)}</td>
                   <td className="px-2 py-2 text-xs text-slate-600">{formatDate(topic.processedAt)}</td>
+                  <td className="px-2 py-2 text-xs">
+                    <form action={deleteTopicAction}>
+                      <input type="hidden" name="topicId" value={topic.id} />
+                      <button
+                        type="submit"
+                        className="rounded border border-rose-300 bg-rose-50 px-2 py-1 font-semibold text-rose-700 hover:bg-rose-100"
+                      >
+                        حذف
+                      </button>
+                    </form>
+                  </td>
                 </tr>
               ))}
             </tbody>
