@@ -48,6 +48,53 @@ export async function importReferenceTaxonomyAction(): Promise<void> {
   });
 }
 
+export async function updateCategoryAction(formData: FormData): Promise<void> {
+  const slug = String(formData.get("slug") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!slug || !name) return;
+
+  await withGuard(async () => {
+    await prisma.category.update({
+      where: { slug },
+      data: {
+        name,
+        slug: slugifyArabic(name),
+      },
+    });
+    revalidatePath("/admin/categories");
+    revalidatePath("/");
+  });
+}
+
+export async function deleteCategoryAction(formData: FormData): Promise<void> {
+  const slug = String(formData.get("slug") ?? "").trim();
+  if (!slug) return;
+
+  await withGuard(async () => {
+    const category = await prisma.category.findUnique({
+      where: { slug },
+      include: {
+        children: { select: { id: true } },
+        articles: { select: { id: true } },
+      },
+    });
+    if (!category) return;
+
+    // If category has dependencies, disable it instead of hard deleting.
+    if (category.children.length > 0 || category.articles.length > 0) {
+      await prisma.category.update({
+        where: { id: category.id },
+        data: { isActive: false },
+      });
+    } else {
+      await prisma.category.delete({ where: { id: category.id } });
+    }
+
+    revalidatePath("/admin/categories");
+    revalidatePath("/");
+  });
+}
+
 export async function createArticleAction(formData: FormData): Promise<void> {
   const title = String(formData.get("title") ?? "").trim();
   const excerpt = String(formData.get("excerpt") ?? "").trim();
