@@ -88,7 +88,7 @@ async function processSingleTopic(topicId: string, runKey?: string) {
   let aiMetaDescription = "";
   let aiInternalLinkSuggestions: { anchor: string; targetTopic: string }[] = [];
 
-  if (process.env.LLM_BASE_URL || process.env.OPENAI_API_KEY) {
+  if (process.env.OPENAI_API_KEY) {
     const aiPackage = await generateArticlePackageWithAI({
       topic: topic.rawTitle,
       mainCategory: mainCategory.name,

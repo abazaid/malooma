@@ -26,19 +26,22 @@ function buildFallbackCover(seed: string) {
 }
 
 export async function generateCoverImage(input: CoverInput): Promise<CoverOutput> {
-  const imageApiKey = env.OPENAI_IMAGE_API_KEY || env.OPENAI_API_KEY;
-  if (!imageApiKey) return buildFallbackCover(input.fallbackSeed);
+  if (!env.OPENAI_API_KEY) return buildFallbackCover(input.fallbackSeed);
 
   try {
-    const client = new OpenAI({ apiKey: imageApiKey });
-    const imageModel = env.OPENAI_IMAGE_MODEL || "gpt-image-1";
-    const result = await client.images.generate({
+    const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+    const imageModel = env.OPENAI_IMAGE_MODEL || "gpt-image-1.5";
+    const params: Parameters<typeof client.images.generate>[0] = {
       model: imageModel,
       prompt: input.prompt,
       size: "1536x1024",
-    });
+    };
+    if (imageModel.startsWith("gpt-image-")) {
+      params.quality = "low";
+    }
 
-    const b64 = result.data?.[0]?.b64_json;
+    const result = await client.images.generate(params);
+    const b64 = "data" in result ? result.data?.[0]?.b64_json : undefined;
     if (!b64) return buildFallbackCover(input.fallbackSeed);
 
     const buffer = Buffer.from(b64, "base64");

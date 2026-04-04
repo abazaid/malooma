@@ -71,7 +71,7 @@ function normalizePackage(input: AiArticlePackage, titleFallback: string): AiArt
   return {
     ...input,
     title: input.title?.trim() || titleFallback,
-    excerpt: input.excerpt?.trim() || `دليل عملي وشامل حول ${titleFallback}.`,
+    excerpt: input.excerpt?.trim() || `دليل عملي حول ${titleFallback}.`,
     h2: (input.h2 ?? []).filter(Boolean).slice(0, 10),
     h3: (input.h3 ?? []).filter(Boolean).slice(0, 12),
     sections: (input.sections ?? []).filter((item) => item?.heading && item?.body),
@@ -84,16 +84,6 @@ function normalizePackage(input: AiArticlePackage, titleFallback: string): AiArt
       .filter((item) => item?.anchor && item?.targetTopic)
       .slice(0, 6),
   };
-}
-
-function createTextClient() {
-  const baseURL = process.env.LLM_BASE_URL || process.env.OPENAI_BASE_URL || "http://127.0.0.1:11434/v1";
-  const apiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || "ollama";
-
-  return new OpenAI({
-    apiKey,
-    baseURL,
-  });
 }
 
 async function promptJson<T>(input: {
@@ -123,20 +113,24 @@ export async function generateArticlePackageWithAI(input: {
   subCategory: string;
   relatedTitles: string[];
 }) {
-  const client = createTextClient();
-  const lightModel = process.env.LLM_MODEL_LIGHT || "qwen3:4b";
-  const writerModel = process.env.LLM_MODEL_WRITER || "qwen3:8b";
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is required for AI generation");
+  }
+
+  const client = new OpenAI({ apiKey });
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const analysis = await promptJson<AnalysisStage>({
     client,
-    model: lightModel,
-    system: "أنت خبير SEO عربي. نفّذ مرحلة التحليل فقط وأعد JSON صحيح فقط.",
-    user: `المرحلة 1: تحليل الموضوع
-الموضوع: ${input.topic}
-التصنيف الرئيسي: ${input.mainCategory}
-التصنيف الفرعي: ${input.subCategory}
+    model,
+    system: "You are an Arabic SEO strategist. Return valid JSON only.",
+    user: `Stage 1 - Analysis for Arabic article.
+Topic: ${input.topic}
+Main category: ${input.mainCategory}
+Sub category: ${input.subCategory}
 
-أعد JSON:
+Return:
 {
   "primaryKeyword": "...",
   "searchIntent": "تعليمي|عملي|حل مشكلة|مقارنة|تجاري",
@@ -148,16 +142,14 @@ export async function generateArticlePackageWithAI(input: {
 
   const outline = await promptJson<OutlineStage>({
     client,
-    model: lightModel,
-    system: "أنت محرر محتوى عربي. نفّذ مرحلة الهيكل فقط وأعد JSON صحيح فقط.",
-    user: `المرحلة 2: بناء الهيكل
-نتيجة التحليل:
+    model,
+    system: "You are an Arabic content editor. Return valid JSON only.",
+    user: `Stage 2 - Outline.
+Analysis:
 ${JSON.stringify(analysis, null, 2)}
 
-الموضوع: ${input.topic}
-أنشئ H2 و H3 مرتبة تخدم نية البحث بدون حشو.
-
-JSON:
+Build an Arabic outline (H2/H3) that serves search intent with no fluff.
+Return:
 {
   "h1": "...",
   "h2": ["..."],
@@ -170,30 +162,29 @@ JSON:
     temperature: 0.4,
   });
 
-  const executionPrompt = `المرحلة 3: كتابة المقال النهائي
-اعتمد فقط على التحليل والهيكل التاليين:
+  const executionPrompt = `Stage 3 - Execution.
+Write the final article in Arabic only, based strictly on the analysis + outline.
+Do not show analysis/outline in output.
 
-التحليل:
+Analysis:
 ${JSON.stringify(analysis, null, 2)}
 
-الهيكل:
+Outline:
 ${JSON.stringify(outline, null, 2)}
 
-عناوين مساعدة للربط الداخلي:
-${input.relatedTitles.slice(0, 15).map((title, idx) => `${idx + 1}. ${title}`).join("\n") || "- لا توجد مقالات سابقة"}
+Related titles for internal linking:
+${input.relatedTitles.slice(0, 15).map((title, idx) => `${idx + 1}. ${title}`).join("\n") || "- no previous articles"}
 
-قواعد إلزامية:
-1) لا تعرض مراحل التحليل أو الهيكل للمستخدم.
-2) اكتب مقال عربي بشري احترافي.
-3) الطول بين 800 و1500 كلمة.
-4) كل فقرة لها فائدة عملية واضحة.
-5) أضف أمثلة واقعية وخطوات ونصائح قابلة للتطبيق.
-6) امنع الحشو والتكرار والأسلوب النظري.
-7) أضف FAQ عملي.
-8) أضف SEO fields: meta title / meta description / keywords.
-9) اقترح روابط داخلية طبيعية (2-5).
+Rules:
+1) Human Arabic style.
+2) Article length between 800 and 1500 words.
+3) Practical value in every section.
+4) Include real examples, actionable steps, tips, and FAQ.
+5) No fluff or repetition.
+6) Include SEO output (meta title, meta description, LSI keywords).
+7) Internal links suggestions between 2 and 5.
 
-أعد JSON فقط بالبنية:
+Return JSON only:
 {
   "searchIntent": "...",
   "title": "...",
@@ -213,8 +204,8 @@ ${input.relatedTitles.slice(0, 15).map((title, idx) => `${idx + 1}. ${title}`).j
   let pkg = normalizePackage(
     await promptJson<AiArticlePackage>({
       client,
-      model: writerModel,
-      system: "أنت كاتب عربي محترف. أعد JSON صالح فقط.",
+      model,
+      system: "You are a senior Arabic writer and SEO editor. Return valid JSON only.",
       user: executionPrompt,
       temperature: 0.7,
     }),
@@ -226,12 +217,12 @@ ${input.relatedTitles.slice(0, 15).map((title, idx) => `${idx + 1}. ${title}`).j
     pkg = normalizePackage(
       await promptJson<AiArticlePackage>({
         client,
-        model: writerModel,
-        system: "أنت محرر عربي. صحّح طول المقال فقط إلى 800-1500 كلمة مع الحفاظ على الجودة. JSON فقط.",
-        user: `الطول الحالي ${words} كلمة. أعد كتابة المحتوى بنفس الفكرة بحيث يصبح بين 800 و1500 كلمة.
-الناتج الحالي:
+        model,
+        system: "Fix word count to 800-1500 while preserving quality. Return valid JSON only.",
+        user: `Current word count is ${words}. Rewrite to target 800-1500 words.
+Current output:
 ${JSON.stringify(pkg)}
-أعد نفس JSON schema.`,
+Return the same JSON schema.`,
         temperature: 0.5,
       }),
       pkg.title || input.topic,

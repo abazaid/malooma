@@ -126,7 +126,7 @@ npm run build
 7. SEO optimization (slug/meta/canonical/LSI)
 8. Internal linking (2–5 links)
 9. Image prompt generation (async image pipeline)
-10. Async image generation via `gpt-image-1`
+10. Async image generation via OpenAI image model
 11. Random author assignment from AI-generated pool (20+ authors)
 12. Scheduling (5/day, single cluster mode)
 13. Publishing + content memory update
@@ -184,10 +184,9 @@ npx prisma db push
 - النمط: `Cluster Mode` فقط (موضوع محوري واحد + 4 مقالات داعمة).
 - عند فشل تكوين Cluster كامل: لا يتم النشر ولا الجدولة.
 
-## Model Selection (Final Workflow)
-- كتابة المقال: `LLM_MODEL_WRITER=qwen3:8b`
-- مهام خفيفة (تحليل/هيكل/SEO/اقتراح روابط): `LLM_MODEL_LIGHT=qwen3:4b`
-- توليد الصور (خارجي Async): `OPENAI_IMAGE_MODEL=gpt-image-1`
+## Model Selection
+- كتابة وتحليل وSEO: `OPENAI_MODEL=gpt-4o-mini`
+- توليد الصور (خارجي Async): `OPENAI_IMAGE_MODEL=gpt-image-1.5` (quality: low)
 
 ## ملاحظة
 المواضيع المصدرية تُستخدم كأفكار فقط، والمحتوى الناتج يتم توليده أصليًا داخل المحرك.
