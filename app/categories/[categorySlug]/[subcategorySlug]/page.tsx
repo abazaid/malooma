@@ -6,6 +6,7 @@ import { Breadcrumbs } from "@/components/content/breadcrumbs";
 import { Pagination } from "@/components/content/pagination";
 import { SectionHeader } from "@/components/content/section-header";
 import { JsonLd } from "@/components/seo/json-ld";
+import { buildSubcategorySeo } from "@/lib/category-seo";
 import { contentRepository } from "@/lib/repositories/content-repository";
 import { buildMetadata } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/utils";
@@ -17,18 +18,25 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { categorySlug, subcategorySlug } = await params;
-  const [category, subcategory] = await Promise.all([
+  const [category, subcategory, articles] = await Promise.all([
     contentRepository.getCategoryBySlug(categorySlug),
     contentRepository.getSubcategoryBySlug(categorySlug, subcategorySlug),
+    contentRepository.getArticlesBySubcategory(subcategorySlug, 1, categorySlug),
   ]);
 
   if (!category || !subcategory) {
     return buildMetadata({ title: "تصنيف غير موجود", description: "الصفحة المطلوبة غير متاحة.", path: "/404", noIndex: true });
   }
 
+  const seo = buildSubcategorySeo({
+    categoryName: category.name,
+    subcategoryName: subcategory.name,
+    articlesCount: articles.total,
+  });
+
   return buildMetadata({
-    title: `${subcategory.name} - ${category.name}`,
-    description: `أرشيف مقالات ${subcategory.name} ضمن قسم ${category.name}.`,
+    title: seo.title,
+    description: seo.description,
     path: `/categories/${category.slug}/${subcategory.slug}`,
   });
 }
@@ -44,6 +52,11 @@ export default async function SubcategoryPage({ params, searchParams }: Props) {
   ]);
 
   if (!category || !subcategory) notFound();
+  const seo = buildSubcategorySeo({
+    categoryName: category.name,
+    subcategoryName: subcategory.name,
+    articlesCount: articles.total,
+  });
 
   return (
     <div className="space-y-6">
@@ -53,6 +66,7 @@ export default async function SubcategoryPage({ params, searchParams }: Props) {
           "@type": "CollectionPage",
           name: `${subcategory.name} - ${category.name}`,
           url: absoluteUrl(`/categories/${category.slug}/${subcategory.slug}`),
+          description: seo.description,
           isPartOf: absoluteUrl(`/categories/${category.slug}`),
         }}
       />
@@ -67,7 +81,7 @@ export default async function SubcategoryPage({ params, searchParams }: Props) {
 
       <header className="rounded-2xl border border-slate-200 bg-white p-6">
         <h1 className="text-3xl font-black text-slate-900">{subcategory.name}</h1>
-        <p className="mt-2 text-sm text-slate-700">أرشيف مقالات هذا التصنيف مرتب حسب الأحدث مع روابط نحو التصنيف الأب والتصنيفات الشقيقة.</p>
+        <p className="mt-2 text-sm leading-8 text-slate-700">{seo.intro}</p>
         <div className="mt-4 flex flex-wrap gap-2 text-xs">
           <Link href={`/categories/${category.slug}`} className="rounded border border-slate-300 px-3 py-1.5 hover:bg-slate-50">
             العودة إلى {category.name}

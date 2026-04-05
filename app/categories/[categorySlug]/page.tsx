@@ -6,6 +6,7 @@ import { Breadcrumbs } from "@/components/content/breadcrumbs";
 import { Pagination } from "@/components/content/pagination";
 import { SectionHeader } from "@/components/content/section-header";
 import { JsonLd } from "@/components/seo/json-ld";
+import { buildCategorySeo } from "@/lib/category-seo";
 import { contentRepository } from "@/lib/repositories/content-repository";
 import { buildMetadata } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/utils";
@@ -17,14 +18,24 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { categorySlug } = await params;
-  const category = await contentRepository.getCategoryBySlug(categorySlug);
+  const [category, articles] = await Promise.all([
+    contentRepository.getCategoryBySlug(categorySlug),
+    contentRepository.getArticlesByCategory(categorySlug, 1),
+  ]);
+
   if (!category) {
     return buildMetadata({ title: "تصنيف غير موجود", description: "الصفحة المطلوبة غير متاحة.", path: "/404", noIndex: true });
   }
 
+  const seo = buildCategorySeo({
+    categoryName: category.name,
+    subcategoriesCount: category.subcategories.length,
+    articlesCount: articles.total,
+  });
+
   return buildMetadata({
-    title: category.name,
-    description: category.description,
+    title: seo.title,
+    description: seo.description,
     path: `/categories/${category.slug}`,
   });
 }
@@ -39,6 +50,11 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   ]);
 
   if (!category) notFound();
+  const seo = buildCategorySeo({
+    categoryName: category.name,
+    subcategoriesCount: category.subcategories.length,
+    articlesCount: articles.total,
+  });
 
   return (
     <div className="space-y-6">
@@ -48,7 +64,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           "@type": "CollectionPage",
           name: category.name,
           url: absoluteUrl(`/categories/${category.slug}`),
-          description: category.description,
+          description: seo.description,
         }}
       />
 
@@ -56,7 +72,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
       <header className="rounded-2xl border border-slate-200 bg-white p-6">
         <h1 className="text-3xl font-black text-slate-900">{category.name}</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-8 text-slate-700">{category.description}</p>
+        <p className="mt-3 max-w-3xl text-sm leading-8 text-slate-700">{seo.intro}</p>
       </header>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
