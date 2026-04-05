@@ -14,6 +14,7 @@ type CoverOutput = {
   mimeType: string;
   storageKey: string;
   url: string;
+  isFallback?: boolean;
 };
 
 function buildFallbackCover(seed: string) {
@@ -23,6 +24,7 @@ function buildFallbackCover(seed: string) {
     storageKey: `external/fallback/${seed}`,
     // Generic fallback to avoid unrelated photos when image generation fails.
     url: `https://placehold.co/1600x900/f1f5f9/0f172a/png?text=${encodeURIComponent("Malooma")}`,
+    isFallback: true,
   } satisfies CoverOutput;
 }
 

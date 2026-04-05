@@ -1,4 +1,5 @@
-﻿import type { Category } from "@prisma/client";
+import type { Category } from "@prisma/client";
+import OpenAI from "openai";
 import { tokenizeArabic } from "@/lib/pipeline/text-utils";
 import { slugifyArabic } from "@/lib/slug";
 import { prisma } from "@/lib/prisma";
@@ -7,22 +8,23 @@ const CATEGORY_HINTS: Record<string, string[]> = {
   "فن الطهي": ["طبخ", "أكل", "وصفة", "حلو", "مطبخ", "سلطة", "كيك", "شوربة", "مشروب"],
   "حول العالم": ["دولة", "مدينة", "سياحة", "عاصمة", "جغرافيا", "معالم", "متاحف", "حضارة", "تاريخ"],
   "العناية بالذات": ["بشرة", "شعر", "مكياج", "عناية", "أزياء", "جمال"],
-  "مال وأعمال": ["اقتصاد", "مشروع", "استثمار", "أعمال", "تجارة", "عملات"],
-  "تقنية": ["تقنية", "هاتف", "انترنت", "برمجة", "كمبيوتر", "تطبيق"],
-  "صحة": ["مرض", "صحة", "علاج", "أعراض", "ضغط", "سكري", "فيتامين"],
-  "تعليم": ["تعليم", "تعلم", "مدرسة", "جامعة", "بحث", "دراسة"],
-  "إسلام": ["إسلام", "دعاء", "القرآن", "حديث", "فقه", "الوضوء"],
-  "تغذية": ["غذاء", "سعرات", "رجيم", "فيتامين", "بروتين"],
-  "حيوانات ونباتات": ["حيوان", "نبات", "زهور", "طيور", "أسماك"],
+  "مال وأعمال": ["اقتصاد", "مشروع", "استثمار", "أعمال", "تجارة", "عملات", "ميزان", "تمويل", "مبيعات"],
+  "تقنية": ["تقنية", "هاتف", "انترنت", "برمجة", "كمبيوتر", "تطبيق", "ذكاء", "رقمي"],
+  "صحة": ["مرض", "صحة", "علاج", "أعراض", "ضغط", "سكري", "فيتامين", "تغذية", "سمنة"],
+  "تعليم": ["تعليم", "تعلم", "مدرسة", "جامعة", "بحث", "دراسة", "منهج", "اختبار"],
+  "إسلام": ["إسلام", "دعاء", "القرآن", "حديث", "فقه", "الوضوء", "الصلاة", "الزكاة"],
+  "تغذية": ["غذاء", "سعرات", "رجيم", "فيتامين", "بروتين", "غذائية", "حمية"],
+  "حيوانات ونباتات": ["حيوان", "نبات", "زهور", "طيور", "أسماك", "زراعة"],
   "قصص وحكايات": ["قصة", "حكاية", "رواية"],
-  "فنون": ["موسيقى", "فن", "رسم", "شعر", "أدب"],
-  "الحياة والمجتمع": ["المجتمع", "الأسرة", "المرأة", "الطلاق", "البطالة", "التسول", "العنف"],
+  "فنون": ["موسيقى", "فن", "رسم", "شعر", "أدب", "مسرح"],
+  "الحياة والمجتمع": ["المجتمع", "الأسرة", "المرأة", "الطلاق", "البطالة", "التسول", "العنف", "زواج"],
 };
+
+const ELIGIBLE_MAIN_NAMES = Object.keys(CATEGORY_HINTS);
 
 function forcedMainCategory(title: string) {
   const normalized = title.replace(/\s+/g, " ").trim();
 
-  // Effect topics (e.g. "آثار التدخين على ...") should not be treated as monuments/travel.
   if (normalized.includes("آثار") && normalized.includes("على")) {
     if (/(التدخين|السكر|الضغط|مرض|صحة|البشرة|الشعر|الشمس|الحروق)/.test(normalized)) return "صحة";
     if (/(البطالة|الطلاق|التسول|العنف|المجتمع|المرأة|الأسرة)/.test(normalized)) return "الحياة والمجتمع";
@@ -32,8 +34,7 @@ function forcedMainCategory(title: string) {
 }
 
 async function ensureBaseMainCategories() {
-  const baseNames = Object.keys(CATEGORY_HINTS);
-  for (const [index, name] of baseNames.entries()) {
+  for (const [index, name] of ELIGIBLE_MAIN_NAMES.entries()) {
     const slug = slugifyArabic(name);
     await prisma.category.upsert({
       where: { slug },
@@ -60,11 +61,8 @@ function scoreMainCategory(title: string, categoryName: string) {
   const hints = CATEGORY_HINTS[categoryName] ?? [];
   let score = 0;
   for (const token of tokens) {
-    if (hints.some((hint) => token.includes(hint) || hint.includes(token))) {
-      score += 2;
-    }
+    if (hints.some((hint) => token.includes(hint) || hint.includes(token))) score += 2;
   }
-
   if (title.includes(categoryName)) score += 3;
   return score;
 }
@@ -78,6 +76,32 @@ function scoreSubCategory(title: string, subName: string) {
   return score;
 }
 
+async function pickMainCategoryWithAi(title: string, mains: Category[]) {
+  if (!process.env.OPENAI_API_KEY || mains.length === 0) return null;
+  try {
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const response = await client.chat.completions.create({
+      model,
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "Classify the Arabic title to one category from the provided list only. Return JSON only: {\"category\":\"...\"}.",
+        },
+        { role: "user", content: `Title: ${title}\nCategories: ${mains.map((m) => m.name).join(" | ")}` },
+      ],
+    });
+    const raw = response.choices[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw) as { category?: string };
+    return mains.find((m) => m.name === parsed.category) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function classifyTopic(title: string): Promise<{ mainCategory: Category; subCategory: Category }> {
   await ensureBaseMainCategories();
 
@@ -88,21 +112,28 @@ export async function classifyTopic(title: string): Promise<{ mainCategory: Cate
 
   const mainCategories = categories.filter((cat) => cat.level === 1);
   const subCategories = categories.filter((cat) => cat.level === 2);
+  const hintedMainCategories = mainCategories.filter((cat) => ELIGIBLE_MAIN_NAMES.includes(cat.name));
+  const eligibleMains = hintedMainCategories.length > 0 ? hintedMainCategories : mainCategories;
 
   const forcedMain = forcedMainCategory(title);
+  let winnerMain = eligibleMains[0];
+  let bestMainScore = -1;
 
-  let winnerMain = mainCategories[0];
   if (forcedMain) {
-    const forced = mainCategories.find((item) => item.name === forcedMain);
+    const forced = eligibleMains.find((item) => item.name === forcedMain);
     if (forced) winnerMain = forced;
   } else {
-    let maxMainScore = -1;
-    for (const main of mainCategories) {
+    for (const main of eligibleMains) {
       const score = scoreMainCategory(title, main.name);
-      if (score > maxMainScore) {
-        maxMainScore = score;
+      if (score > bestMainScore) {
+        bestMainScore = score;
         winnerMain = main;
       }
+    }
+
+    if (bestMainScore <= 0) {
+      const aiPick = await pickMainCategoryWithAi(title, eligibleMains);
+      if (aiPick) winnerMain = aiPick;
     }
   }
 
@@ -128,11 +159,10 @@ export async function classifyTopic(title: string): Promise<{ mainCategory: Cate
         parentId: winnerMain.id,
         description: `تصنيف فرعي تلقائي ضمن ${winnerMain.name}`,
       },
-      update: {
-        isActive: true,
-      },
+      update: { isActive: true },
     });
   }
 
   return { mainCategory: winnerMain, subCategory: winnerSub };
 }
+

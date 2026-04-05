@@ -765,7 +765,11 @@ export async function processPendingImages(limit = 5, runKey?: string) {
   };
 
   const candidates = queue
-    .filter((item) => !item.article.heroMediaId || isMissingLocalGeneratedFile(item.article.heroMedia?.url))
+    .filter((item) => {
+      const url = item.article.heroMedia?.url;
+      const isExternalFallback = Boolean(url && (url.includes("placehold.co") || url.includes("picsum.photos")));
+      return !item.article.heroMediaId || isMissingLocalGeneratedFile(url) || isExternalFallback;
+    })
     .slice(0, Math.min(MAX_DAILY_ARTICLES, Math.max(1, limit)));
 
   let generated = 0;
@@ -775,6 +779,16 @@ export async function processPendingImages(limit = 5, runKey?: string) {
       prompt: item.prompt,
       fallbackSeed: slugifyArabic(`${item.article.category.name}-${item.article.slug}`),
     });
+    if (cover.isFallback) {
+      await logPipelineEvent({
+        stage: "ARTICLE_COVER_FAILED",
+        status: "WARNING",
+        runKey,
+        articleId: item.article.id,
+        message: "Image generation failed; skipped attaching generic fallback image.",
+      });
+      continue;
+    }
 
     const media = await prisma.media.create({
       data: {
