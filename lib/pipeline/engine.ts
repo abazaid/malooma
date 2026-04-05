@@ -15,7 +15,7 @@ import { generateArticlePackageWithAI } from "@/lib/pipeline/ai-generator";
 import { slugifyArabic } from "@/lib/slug";
 import { ensureContributorPools, pickRandomItem } from "@/lib/pipeline/author-pool";
 import { generateCoverImage } from "@/lib/pipeline/cover-image";
-import { jaccardSimilarity } from "@/lib/pipeline/text-utils";
+import { jaccardSimilarity, sharedCoreTokenCount, topicCoherenceScore } from "@/lib/pipeline/text-utils";
 import { logPipelineEvent } from "@/lib/pipeline/events";
 
 const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL ?? "https://malooma.org";
@@ -395,9 +395,10 @@ async function selectDailyTopicCluster() {
       .filter((item) => item.id !== core.id)
       .map((item) => ({
         topic: item,
-        score: jaccardSimilarity(core.normalizedTitle, item.normalizedTitle),
+        score: topicCoherenceScore(core.normalizedTitle, item.normalizedTitle),
+        sharedCore: sharedCoreTokenCount(core.normalizedTitle, item.normalizedTitle),
       }))
-      .filter((item) => item.score >= 0.2)
+      .filter((item) => item.score >= 0.45 && item.sharedCore >= 2)
       .sort((a, b) => (b.score === a.score ? +new Date(a.topic.createdAt) - +new Date(b.topic.createdAt) : b.score - a.score));
 
     const supporting = scored.slice(0, SUPPORTING_SIZE).map((item) => item.topic);
@@ -414,12 +415,16 @@ async function attachClusterLinks(input: {
 }) {
   const articles = await prisma.article.findMany({
     where: { id: { in: input.articleIds } },
-    select: { id: true, slug: true, title: true },
+    select: { id: true, slug: true, title: true, categoryId: true },
   });
 
   const toAnchor = (title: string) => title.replace(/^ما\s+هو\s+/g, "").replace(/^كيفية\s+/g, "").trim();
   for (const article of articles) {
-    const peers = articles.filter((item) => item.id !== article.id);
+    const peers = articles.filter((item) => {
+      if (item.id === article.id) return false;
+      if (item.categoryId !== article.categoryId) return false;
+      return topicCoherenceScore(article.title, item.title) >= 0.35;
+    });
     for (const peer of peers) {
       const score = Math.max(0.7, jaccardSimilarity(article.title, peer.title));
       await prisma.articleRelated.upsert({
@@ -445,6 +450,12 @@ async function attachClusterLinks(input: {
       where: { articleId: article.id, blockType: "related_articles" },
       select: { id: true },
     });
+    if (lines.length === 0) {
+      if (existing) {
+        await prisma.articleSection.delete({ where: { id: existing.id } });
+      }
+      continue;
+    }
 
     if (existing) {
       await prisma.articleSection.update({

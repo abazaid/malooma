@@ -39,3 +39,51 @@ export function jaccardSimilarity(a: string, b: string) {
 export function splitToSentences(text: string) {
   return text.split(/[.!؟\n]/).map((s) => s.trim()).filter(Boolean);
 }
+
+const TOPIC_STOPWORDS = new Set([
+  "ما",
+  "ماذا",
+  "هو",
+  "هي",
+  "على",
+  "من",
+  "في",
+  "عن",
+  "الى",
+  "إلى",
+  "و",
+  "او",
+  "أو",
+  "كيف",
+  "كيفية",
+  "تعريف",
+  "شرح",
+  "أهم",
+  "افضل",
+  "أفضل",
+  "آثار",
+  "اثر",
+  "أثر",
+]);
+
+function coreTokens(text: string) {
+  return tokenizeArabic(text).filter((token) => !TOPIC_STOPWORDS.has(token) && token.length >= 3);
+}
+
+export function sharedCoreTokenCount(a: string, b: string) {
+  const sa = new Set(coreTokens(a));
+  const sb = new Set(coreTokens(b));
+  if (sa.size === 0 || sb.size === 0) return 0;
+  let shared = 0;
+  for (const token of sa) {
+    if (sb.has(token)) shared += 1;
+  }
+  return shared;
+}
+
+export function topicCoherenceScore(a: string, b: string) {
+  const j = jaccardSimilarity(a, b);
+  const coreShared = sharedCoreTokenCount(a, b);
+  const coreBoost = Math.min(0.5, coreShared * 0.15);
+  return j + coreBoost;
+}

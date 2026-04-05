@@ -1,5 +1,5 @@
 ﻿import { prisma } from "@/lib/prisma";
-import { jaccardSimilarity } from "@/lib/pipeline/text-utils";
+import { topicCoherenceScore } from "@/lib/pipeline/text-utils";
 
 function toAnchorText(title: string) {
   return title.replace(/^ما\s+هو\s+/g, "").replace(/^كيفية\s+/g, "").trim();
@@ -22,11 +22,11 @@ export async function selectRelatedArticles(params: {
   const scored = pool
     .map((article) => ({
       article,
-      score: jaccardSimilarity(params.title, article.title),
+      score: topicCoherenceScore(params.title, article.title),
     }))
-    .filter((item) => item.score > 0.08)
+    .filter((item) => item.score >= 0.35)
     .sort((a, b) => b.score - a.score)
-    .slice(0, Math.max(2, Math.min(params.max, 5)));
+    .slice(0, Math.min(params.max, 8));
 
   return scored;
 }
@@ -116,8 +116,8 @@ export async function backfillInternalLinksToNewArticle(newArticleId: string) {
   let updated = 0;
 
   for (const old of oldArticles) {
-    const score = jaccardSimilarity(old.title, article.title);
-    if (score < 0.1) continue;
+    const score = topicCoherenceScore(old.title, article.title);
+    if (score < 0.35) continue;
 
     await prisma.articleRelated.upsert({
       where: {

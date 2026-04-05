@@ -14,9 +14,16 @@ export type GeneratedOutline = {
 export function generateOutline(title: string): GeneratedOutline {
   const tokens = tokenizeArabic(title);
   const core = tokens.slice(0, 4).join(" ") || title;
+  const inferredAngle = title.includes("أسباب")
+    ? "الأسباب"
+    : title.includes("نتائج")
+      ? "النتائج"
+      : title.includes("دروس")
+        ? "الدروس"
+        : "الشرح المبسّط";
 
   return {
-    searchIntent: `المستخدم يريد فهم ${title} بشكل عملي مع خطوات واضحة وتطبيق مباشر.`,
+    searchIntent: `المستخدم يريد ${inferredAngle} حول ${title} بشكل مباشر وقابل للتطبيق.`,
     h1: title,
     h2: [
       `ما المقصود بـ ${core}؟`,
