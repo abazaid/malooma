@@ -7,7 +7,12 @@ import { slugifyArabic } from "@/lib/slug";
 import { enqueueManualTopic, intakeTopicsFromReference } from "@/lib/pipeline/topic-intake";
 import { processPendingImages, publishDueArticles, publishScheduledNow, runContentPipeline } from "@/lib/pipeline/engine";
 import { importReferenceTaxonomyToDb } from "@/lib/pipeline/taxonomy-import";
-import { DEFAULT_ARTICLE_SETTINGS, DEFAULT_GENERAL_SETTINGS, saveModelSettings } from "@/lib/pipeline/model-settings";
+import {
+  DEFAULT_ARTICLE_SETTINGS,
+  DEFAULT_GENERAL_SETTINGS,
+  DEFAULT_OPTIMIZATION_SETTINGS,
+  saveModelSettings,
+} from "@/lib/pipeline/model-settings";
 
 type ActionResult = { ok: boolean; message: string };
 
@@ -442,11 +447,13 @@ export async function deleteTopicAction(formData: FormData): Promise<void> {
 export async function saveModelSettingsAction(formData: FormData): Promise<void> {
   const general = String(formData.get("generalSettings") ?? "").trim();
   const article = String(formData.get("articleSettings") ?? "").trim();
+  const optimization = String(formData.get("optimizationSettings") ?? "").trim();
 
   try {
     await saveModelSettings({
       general: general || DEFAULT_GENERAL_SETTINGS,
       article: article || DEFAULT_ARTICLE_SETTINGS,
+      optimization: optimization || DEFAULT_OPTIMIZATION_SETTINGS,
     });
     revalidatePath("/admin/model-settings");
     redirect(`/admin/model-settings?notice=${encodeURIComponent("تم حفظ إعدادات الموديل وتفعيلها للتوليد القادم")}`);

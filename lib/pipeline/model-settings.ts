@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 
 const GENERAL_SETTINGS_SLUG = "model-settings-general";
 const ARTICLE_SETTINGS_SLUG = "model-settings-articles";
+const OPTIMIZATION_SETTINGS_SLUG = "model-settings-optimization";
 
 export const DEFAULT_GENERAL_SETTINGS = `أنت نظام إنتاج محتوى عربي احترافي.
 
@@ -49,9 +50,36 @@ SEO لكل مقال:
 - 2-5 روابط فقط إذا كانت من نفس المحور/التصنيف.
 - إذا لا يوجد تطابق: اترك القسم فارغًا أو أضف اقتراحات مستقبلية فقط.`;
 
+export const DEFAULT_OPTIMIZATION_SETTINGS = `أنت نظام تحسين محتوى SEO احترافي مسؤول عن تطوير المقالات المنشورة ورفع ترتيبها.
+
+الهدف:
+- رفع ترتيب المقالات
+- زيادة الزيارات
+- تحسين مدة بقاء المستخدم
+- تقوية الربط الداخلي
+
+دورة التحسين:
+- يوميًا اختر 3-5 مقالات قديمة
+- الأولوية: بدون زيارات / غير محدثة / ضعيفة الربط الداخلي
+
+مراحل التحسين:
+1) تحليل المقال: نية البحث، جودة المحتوى، الفجوات، قوة العنوان، الروابط الداخلية.
+2) تحسين المحتوى: تقوية الأجزاء الضعيفة، إضافة أمثلة وخطوات عملية.
+3) تحسين SEO: Meta Title/Description، توزيع الكلمات، LSI.
+4) تحسين الهيكل: H2/H3 وترتيب الفقرات وإزالة الحشو.
+5) الربط الداخلي: إضافة روابط مرتبطة فقط وإزالة العشوائي.
+6) الصورة: تحديث prompt الصورة للمقالات المهمة أو ذات الصورة الضعيفة.
+
+قواعد:
+- لا تغير موضوع المقال بالكامل.
+- لا تنشئ مقالًا جديدًا بدل التحسين.
+- لا تغيّر الكلمة المفتاحية الأساسية.
+- لا تضف روابط غير مرتبطة.`;
+
 export type ModelSettings = {
   general: string;
   article: string;
+  optimization: string;
 };
 
 async function readSettingBody(slug: string, fallback: string) {
@@ -68,11 +96,13 @@ async function readSettingBody(slug: string, fallback: string) {
 }
 
 export async function getModelSettings(): Promise<ModelSettings> {
-  const [general, article] = await Promise.all([
+  const [general, article, optimization] = await Promise.all([
     readSettingBody(GENERAL_SETTINGS_SLUG, DEFAULT_GENERAL_SETTINGS),
     readSettingBody(ARTICLE_SETTINGS_SLUG, DEFAULT_ARTICLE_SETTINGS),
+    readSettingBody(OPTIMIZATION_SETTINGS_SLUG, DEFAULT_OPTIMIZATION_SETTINGS),
   ]);
-  return { general, article };
+
+  return { general, article, optimization };
 }
 
 export async function saveModelSettings(input: ModelSettings) {
@@ -106,6 +136,21 @@ export async function saveModelSettings(input: ModelSettings) {
     update: {
       title: "إعدادات الموديل - المقالات",
       body: input.article,
+      isIndexed: false,
+    },
+  });
+
+  await prisma.staticPage.upsert({
+    where: { slug: OPTIMIZATION_SETTINGS_SLUG },
+    create: {
+      slug: OPTIMIZATION_SETTINGS_SLUG,
+      title: "إعدادات الموديل - تحسين المحتوى",
+      body: input.optimization,
+      isIndexed: false,
+    },
+    update: {
+      title: "إعدادات الموديل - تحسين المحتوى",
+      body: input.optimization,
       isIndexed: false,
     },
   });

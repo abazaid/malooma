@@ -50,6 +50,17 @@ export default async function AdminModelSettingsPage({
           />
         </section>
 
+        <section className="space-y-2">
+          <h3 className="text-lg font-bold text-slate-900">تحسين المحتوى (Content Optimization Engine)</h3>
+          <p className="text-sm text-slate-600">تعليمات تطوير المقالات القديمة ورفع أدائها وترتيبها بشكل دوري.</p>
+          <textarea
+            name="optimizationSettings"
+            defaultValue={settings.optimization}
+            rows={18}
+            className="w-full rounded-lg border border-slate-300 p-3 text-sm leading-7"
+          />
+        </section>
+
         <div className="flex flex-wrap gap-2">
           <button type="submit" className="rounded bg-slate-900 px-5 py-2 text-sm font-bold text-white hover:bg-slate-800">
             حفظ إعدادات الموديل
@@ -59,4 +70,3 @@ export default async function AdminModelSettingsPage({
     </div>
   );
 }
-
