@@ -92,43 +92,53 @@ async function processSingleTopic(topicId: string, runKey?: string) {
   let aiInternalLinkSuggestions: { anchor: string; targetTopic: string }[] = [];
 
   if (process.env.OPENAI_API_KEY) {
-    const aiPackage = await generateArticlePackageWithAI({
-      topic: topic.rawTitle,
-      mainCategory: mainCategory.name,
-      subCategory: subCategory.name,
-      relatedTitles: relatedMemory.map((item) => item.title),
-    });
+    try {
+      const aiPackage = await generateArticlePackageWithAI({
+        topic: topic.rawTitle,
+        mainCategory: mainCategory.name,
+        subCategory: subCategory.name,
+        relatedTitles: relatedMemory.map((item) => item.title),
+      });
 
-    outline = {
-      searchIntent: aiPackage.searchIntent,
-      h1: aiPackage.title,
-      h2: aiPackage.h2,
-      h3: aiPackage.h3,
-      faq: aiPackage.faq.map((item) => ({ q: item.q, aHint: item.a })),
-      keyPoints: aiPackage.keyPoints,
-      conclusion: aiPackage.conclusion,
-      lsiKeywords: aiPackage.lsiKeywords,
-    };
+      outline = {
+        searchIntent: aiPackage.searchIntent,
+        h1: aiPackage.title,
+        h2: aiPackage.h2,
+        h3: aiPackage.h3,
+        faq: aiPackage.faq.map((item) => ({ q: item.q, aHint: item.a })),
+        keyPoints: aiPackage.keyPoints,
+        conclusion: aiPackage.conclusion,
+        lsiKeywords: aiPackage.lsiKeywords,
+      };
 
-    draft = {
-      intro: aiPackage.excerpt,
-      sections: aiPackage.sections.map((section) => ({ heading: section.heading, text: section.body })),
-      bulletBlock: aiPackage.keyPoints.map((point) => `- ${point}`).join("\n"),
-      conclusion: aiPackage.conclusion,
-      wordCount: aiPackage.sections.map((section) => section.body).join(" ").split(/\s+/).filter(Boolean).length,
-    };
+      draft = {
+        intro: aiPackage.excerpt,
+        sections: aiPackage.sections.map((section) => ({ heading: section.heading, text: section.body })),
+        bulletBlock: aiPackage.keyPoints.map((point) => `- ${point}`).join("\n"),
+        conclusion: aiPackage.conclusion,
+        wordCount: aiPackage.sections.map((section) => section.body).join(" ").split(/\s+/).filter(Boolean).length,
+      };
 
-    aiMetaTitle = aiPackage.metaTitle;
-    aiMetaDescription = aiPackage.metaDescription;
-    aiInternalLinkSuggestions = aiPackage.internalLinkSuggestions;
+      aiMetaTitle = aiPackage.metaTitle;
+      aiMetaDescription = aiPackage.metaDescription;
+      aiInternalLinkSuggestions = aiPackage.internalLinkSuggestions;
 
-    await logPipelineEvent({
-      stage: "AI_GENERATION_DONE",
-      status: "SUCCESS",
-      runKey,
-      topicId: topic.id,
-      message: `AI article generated (${draft.wordCount} words)`,
-    });
+      await logPipelineEvent({
+        stage: "AI_GENERATION_DONE",
+        status: "SUCCESS",
+        runKey,
+        topicId: topic.id,
+        message: `AI article generated (${draft.wordCount} words)`,
+      });
+    } catch (error) {
+      await logPipelineEvent({
+        stage: "AI_GENERATION_FAILED",
+        status: "WARNING",
+        runKey,
+        topicId: topic.id,
+        message: error instanceof Error ? error.message : "AI generation failed, fallback to local writer",
+      });
+    }
   }
 
   const seo = optimizeSeo({

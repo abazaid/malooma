@@ -352,8 +352,9 @@ export async function runPipelineNowAction(): Promise<void> {
     revalidatePath("/admin/pipeline");
     revalidatePath("/admin");
     redirect(`/admin/pipeline?notice=${encodeURIComponent("تم بدء تشغيل الـ Pipeline")}`);
-  } catch {
-    redirect(`/admin/pipeline?error=${encodeURIComponent("تعذر تشغيل الـ Pipeline. راجع السجلات")}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown pipeline error";
+    redirect(`/admin/pipeline?error=${encodeURIComponent(`تعذر تشغيل الـ Pipeline: ${message}`)}`);
   }
 }
 
@@ -364,8 +365,9 @@ export async function startManualPublishingSystemAction(): Promise<void> {
     revalidatePath("/admin/pipeline");
     revalidatePath("/admin");
     redirect(`/admin/pipeline?notice=${encodeURIComponent("بدأ نظام النشر الآن (2 Clusters = 10 مقالات)")}`);
-  } catch {
-    redirect(`/admin/pipeline?error=${encodeURIComponent("فشل بدء نظام النشر. تحقق من السجلات والبيئة")}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown pipeline error";
+    redirect(`/admin/pipeline?error=${encodeURIComponent(`فشل بدء نظام النشر: ${message}`)}`);
   }
 }
 
