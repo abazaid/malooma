@@ -31,6 +31,9 @@ export default async function AdminDashboardPage() {
           <Link href="/admin/pipeline" className="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
             مراقبة الأتمتة
           </Link>
+          <Link href="/admin/model-settings" className="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
+            إعدادات الموديل
+          </Link>
           <Link href="/admin/categories" className="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
             إضافة قسم
           </Link>

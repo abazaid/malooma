@@ -3,6 +3,7 @@
 const adminLinks = [
   { href: "/admin", label: "لوحة المعلومات" },
   { href: "/admin/pipeline", label: "مراقبة الأتمتة" },
+  { href: "/admin/model-settings", label: "إعدادات الموديل" },
   { href: "/admin/categories", label: "الأقسام" },
   { href: "/admin/articles", label: "المقالات" },
   { href: "/admin/static-pages", label: "الصفحات الثابتة" },

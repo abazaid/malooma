@@ -1,4 +1,5 @@
-﻿import OpenAI from "openai";
+import OpenAI from "openai";
+import { getModelSettings } from "@/lib/pipeline/model-settings";
 
 type SearchIntent = "تعليمي" | "عملي" | "حل مشكلة" | "مقارنة" | "تجاري";
 
@@ -114,20 +115,21 @@ export async function generateArticlePackageWithAI(input: {
 
   const client = new OpenAI({ apiKey });
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const modelSettings = await getModelSettings();
 
   const analysis = await promptJson<AnalysisStage>({
     client,
     model,
-    system: "You are a strict Arabic SEO strategist. Output JSON only.",
-    user: `Stage 1 Analysis:\nTopic: ${input.topic}\nMain category: ${input.mainCategory}\nSub category: ${input.subCategory}\n\nRules:\n- Pick ONE intent from: تعليمي | عملي | حل مشكلة | مقارنة | تجاري\n- Pick ONE writing angle from: شرح مبسط | تحليل | أسباب | نتائج | دروس\n- Define one specific user question this article must answer\n\nReturn JSON with: primaryKeyword, searchIntent, angle, userGoal, userProblem, userQuestion`,
+    system: `You are a strict Arabic SEO strategist. Output JSON only.\n\nGlobal operating rules:\n${modelSettings.general}`,
+    user: `Stage 1 Analysis:\nTopic: ${input.topic}\nMain category: ${input.mainCategory}\nSub category: ${input.subCategory}\n\nArticle rules:\n${modelSettings.article}\n\nRules:\n- Pick ONE intent from: تعليمي | عملي | حل مشكلة | مقارنة | تجاري\n- Pick ONE writing angle from: شرح مبسط | تحليل | أسباب | نتائج | دروس\n- Define one specific user question this article must answer\n\nReturn JSON with: primaryKeyword, searchIntent, angle, userGoal, userProblem, userQuestion`,
     temperature: 0.2,
   });
 
   const outline = await promptJson<OutlineStage>({
     client,
     model,
-    system: "You are a senior Arabic content architect. Output JSON only.",
-    user: `Stage 2 Outline based on this analysis:\n${JSON.stringify(analysis)}\n\nReturn JSON with h1, h2[], h3[], keyPoints[], faqQuestions[], lsiKeywords[], flowNote.`,
+    system: `You are a senior Arabic content architect. Output JSON only.\n\nGlobal operating rules:\n${modelSettings.general}`,
+    user: `Stage 2 Outline based on this analysis:\n${JSON.stringify(analysis)}\n\nArticle rules:\n${modelSettings.article}\n\nReturn JSON with h1, h2[], h3[], keyPoints[], faqQuestions[], lsiKeywords[], flowNote.`,
     temperature: 0.35,
   });
 
@@ -136,6 +138,9 @@ Do not output analysis or outline text; output final JSON only.
 
 Analysis: ${JSON.stringify(analysis)}
 Outline: ${JSON.stringify(outline)}
+
+Article rules:
+${modelSettings.article}
 
 Related titles (for internal links):
 ${input.relatedTitles.slice(0, 20).map((title, i) => `${i + 1}. ${title}`).join("\n") || "- none"}
@@ -174,26 +179,25 @@ Return JSON schema:
     await promptJson<AiArticlePackage>({
       client,
       model,
-      system: "You are an Arabic senior editor and SEO specialist. Output valid JSON only.",
+      system: `You are an Arabic senior editor and SEO specialist. Output valid JSON only.\n\nGlobal operating rules:\n${modelSettings.general}`,
       user: executionPrompt,
       temperature: 0.6,
     }),
     outline.h1 || input.topic,
   );
 
-  let words = bodyWordCount(pkg);
+  const words = bodyWordCount(pkg);
   if (words < 900 || pkg.sections.length < 7) {
     pkg = normalizePackage(
       await promptJson<AiArticlePackage>({
         client,
         model,
-        system: "Rewrite and expand the article while preserving quality. Output JSON only.",
-        user: `Current body words: ${words}, sections: ${pkg.sections.length}. Rewrite to 900-1500 words and at least 7 sections. Keep practical examples and actionable steps.\n\nCurrent JSON:\n${JSON.stringify(pkg)}`,
+        system: `Rewrite and expand the article while preserving quality. Output JSON only.\n\nGlobal operating rules:\n${modelSettings.general}`,
+        user: `Current body words: ${words}, sections: ${pkg.sections.length}. Rewrite to 900-1500 words and at least 7 sections. Keep practical examples and actionable steps.\n\nArticle rules:\n${modelSettings.article}\n\nCurrent JSON:\n${JSON.stringify(pkg)}`,
         temperature: 0.5,
       }),
       pkg.title || input.topic,
     );
-    words = bodyWordCount(pkg);
   }
 
   return pkg;

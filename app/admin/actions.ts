@@ -7,6 +7,7 @@ import { slugifyArabic } from "@/lib/slug";
 import { enqueueManualTopic, intakeTopicsFromReference } from "@/lib/pipeline/topic-intake";
 import { processPendingImages, publishDueArticles, publishScheduledNow, runContentPipeline } from "@/lib/pipeline/engine";
 import { importReferenceTaxonomyToDb } from "@/lib/pipeline/taxonomy-import";
+import { DEFAULT_ARTICLE_SETTINGS, DEFAULT_GENERAL_SETTINGS, saveModelSettings } from "@/lib/pipeline/model-settings";
 
 type ActionResult = { ok: boolean; message: string };
 
@@ -435,5 +436,21 @@ export async function deleteTopicAction(formData: FormData): Promise<void> {
     redirect(`/admin/pipeline?notice=${encodeURIComponent("تم حذف الموضوع بنجاح")}`);
   } catch {
     redirect(`/admin/pipeline?error=${encodeURIComponent("تعذر حذف الموضوع. قد يكون مرتبطًا بسجل آخر")}`);
+  }
+}
+
+export async function saveModelSettingsAction(formData: FormData): Promise<void> {
+  const general = String(formData.get("generalSettings") ?? "").trim();
+  const article = String(formData.get("articleSettings") ?? "").trim();
+
+  try {
+    await saveModelSettings({
+      general: general || DEFAULT_GENERAL_SETTINGS,
+      article: article || DEFAULT_ARTICLE_SETTINGS,
+    });
+    revalidatePath("/admin/model-settings");
+    redirect(`/admin/model-settings?notice=${encodeURIComponent("تم حفظ إعدادات الموديل وتفعيلها للتوليد القادم")}`);
+  } catch {
+    redirect(`/admin/model-settings?error=${encodeURIComponent("تعذر حفظ إعدادات الموديل. تحقق من DATABASE_URL")}`);
   }
 }
