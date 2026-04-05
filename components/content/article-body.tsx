@@ -1,6 +1,14 @@
 ﻿import Link from "next/link";
 import type { ArticleModel } from "@/lib/types";
 
+function parseMarkdownLinks(content: string) {
+  const lines = content.split("\n").map((line) => line.trim()).filter(Boolean);
+  return lines
+    .map((line) => line.match(/\[([^\]]+)\]\(([^)]+)\)/))
+    .filter((m): m is RegExpMatchArray => Boolean(m))
+    .map((m) => ({ label: m[1], href: m[2] }));
+}
+
 function renderBlock(section: ArticleModel["sections"][number]) {
   switch (section.blockType) {
     case "heading":
@@ -57,6 +65,24 @@ function renderBlock(section: ArticleModel["sections"][number]) {
             </tbody>
           </table>
         </div>
+      );
+    }
+    case "related_articles": {
+      const links = parseMarkdownLinks(section.content);
+      if (links.length === 0) return null;
+      return (
+        <section className="my-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <h3 className="mb-3 text-base font-bold text-slate-900">{section.heading || "مقالات مرتبطة"}</h3>
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {links.map((link) => (
+              <li key={`${section.id}-${link.href}`}>
+                <Link href={link.href} className="block rounded border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100">
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       );
     }
     default:
@@ -131,8 +157,10 @@ export function ArticleBody({ article }: { article: ArticleModel }) {
         <ul className="grid gap-3 sm:grid-cols-2">
           {article.relatedArticles.map((related) => (
             <li key={related.slug}>
-              <Link href={`/articles/${related.slug}`} className="block rounded border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">
-                {related.title}
+              <Link href={`/articles/${related.slug}`} className="block overflow-hidden rounded border border-slate-200 hover:bg-slate-50">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={related.heroImage} alt={related.title} loading="lazy" className="h-24 w-full object-cover" />
+                <div className="px-3 py-2 text-sm">{related.title}</div>
               </Link>
             </li>
           ))}

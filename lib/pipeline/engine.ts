@@ -1,4 +1,6 @@
 ﻿import { Prisma } from "@prisma/client";
+import fs from "node:fs";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { classifyTopic } from "@/lib/pipeline/classifier";
 import { generateImagePrompt } from "@/lib/pipeline/image-prompt";
@@ -625,48 +627,65 @@ export async function publishDueArticles(limit = 5, runKey?: string) {
 
   let published = 0;
   for (const article of due) {
-    await prisma.article.update({
-      where: { id: article.id },
-      data: { status: "PUBLISHED" },
-    });
+    try {
+      await prisma.article.update({
+        where: { id: article.id },
+        data: { status: "PUBLISHED" },
+      });
 
-    if (article.topicId) {
-      await prisma.topicQueue.update({
-        where: { id: article.topicId },
-        data: { status: "PUBLISHED", processedAt: new Date() },
+      if (article.topicId) {
+        await prisma.topicQueue.update({
+          where: { id: article.topicId },
+          data: { status: "PUBLISHED", processedAt: new Date() },
+        });
+      }
+
+      await backfillInternalLinksToNewArticle(article.id);
+
+      await upsertContentMemory({
+        articleId: article.id,
+        title: article.title,
+        slug: article.slug,
+        categoryPath: article.categoryId,
+        keywords: article.keywords,
+        summary: article.excerpt,
+      });
+
+      await logPipelineEvent({
+        stage: "ARTICLE_PUBLISHED",
+        status: "SUCCESS",
+        runKey,
+        topicId: article.topicId ?? undefined,
+        articleId: article.id,
+        message: article.slug,
+      });
+
+      published += 1;
+    } catch (error) {
+      await logPipelineEvent({
+        stage: "ARTICLE_PUBLISH_FAILED",
+        status: "ERROR",
+        runKey,
+        topicId: article.topicId ?? undefined,
+        articleId: article.id,
+        message: error instanceof Error ? error.message : "Unknown publish error",
       });
     }
-
-    await backfillInternalLinksToNewArticle(article.id);
-
-    await upsertContentMemory({
-      articleId: article.id,
-      title: article.title,
-      slug: article.slug,
-      categoryPath: article.categoryId,
-      keywords: article.keywords,
-      summary: article.excerpt,
-    });
-
-    await logPipelineEvent({
-      stage: "ARTICLE_PUBLISHED",
-      status: "SUCCESS",
-      runKey,
-      topicId: article.topicId ?? undefined,
-      articleId: article.id,
-      message: article.slug,
-    });
-
-    published += 1;
   }
 
-  await prisma.publishingJob.updateMany({
+  const pendingJobs = await prisma.publishingJob.findMany({
     where: { status: { in: ["PENDING", "RUNNING"] } },
-    data: {
-      status: "DONE",
-      completedCount: { increment: published },
-    },
+    select: { id: true, completedCount: true },
   });
+  for (const job of pendingJobs) {
+    await prisma.publishingJob.update({
+      where: { id: job.id },
+      data: {
+        status: "DONE",
+        completedCount: job.completedCount + published,
+      },
+    });
+  }
 
   return { published };
 }
@@ -723,27 +742,34 @@ export async function publishScheduledNow(limit = 5, runKey?: string) {
 
 export async function processPendingImages(limit = 5, runKey?: string) {
   const queue = await prisma.generatedImagePrompt.findMany({
-    where: {
-      article: {
-        heroMediaId: null,
-      },
-    },
     orderBy: { createdAt: "asc" },
-    take: Math.min(MAX_DAILY_ARTICLES, Math.max(1, limit)),
+    take: 300,
     include: {
       article: {
         select: {
           id: true,
           slug: true,
           title: true,
+          heroMediaId: true,
+          heroMedia: { select: { url: true } },
           category: { select: { name: true } },
         },
       },
     },
   });
 
+  const isMissingLocalGeneratedFile = (url?: string | null) => {
+    if (!url || !url.startsWith("/generated/articles/")) return false;
+    const localPath = path.join(process.cwd(), "public", url.replace(/^\//, ""));
+    return !fs.existsSync(localPath);
+  };
+
+  const candidates = queue
+    .filter((item) => !item.article.heroMediaId || isMissingLocalGeneratedFile(item.article.heroMedia?.url))
+    .slice(0, Math.min(MAX_DAILY_ARTICLES, Math.max(1, limit)));
+
   let generated = 0;
-  for (const item of queue) {
+  for (const item of candidates) {
     const cover = await generateCoverImage({
       slug: item.article.slug,
       prompt: item.prompt,
@@ -846,4 +872,6 @@ export async function runContentPipeline(input?: {
 
   return report;
 }
+
+
 

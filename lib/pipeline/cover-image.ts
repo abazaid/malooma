@@ -46,8 +46,14 @@ export async function generateCoverImage(input: CoverInput): Promise<CoverOutput
     if (!b64) return buildFallbackCover(input.fallbackSeed);
 
     const buffer = Buffer.from(b64, "base64");
-    const safeSlug = input.slug.replace(/[^a-zA-Z0-9\u0600-\u06FF-]/g, "").slice(0, 96) || `cover-${Date.now()}`;
-    const fileName = `${safeSlug}-${Date.now()}.png`;
+    const safeBase = input.slug
+      .normalize("NFKD")
+      .replace(/[^\x00-\x7F]/g, "")
+      .replace(/[^a-zA-Z0-9-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40) || "cover";
+    const fileName = `${Date.now()}-${safeBase}.png`;
     const relativeDir = path.join("generated", "articles");
     const publicDir = path.join(process.cwd(), "public", relativeDir);
     await fs.mkdir(publicDir, { recursive: true });

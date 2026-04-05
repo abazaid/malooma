@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+﻿import OpenAI from "openai";
 
 type SearchIntent = "تعليمي" | "عملي" | "حل مشكلة" | "مقارنة" | "تجاري";
 
@@ -55,34 +55,26 @@ function countWords(value: string) {
   return value.split(/\s+/).filter(Boolean).length;
 }
 
-function packageWordCount(pkg: AiArticlePackage) {
-  const text = [
-    pkg.searchIntent,
-    pkg.excerpt,
-    ...pkg.sections.map((section) => `${section.heading} ${section.body}`),
-    ...pkg.keyPoints,
-    ...pkg.faq.map((faq) => `${faq.q} ${faq.a}`),
-    pkg.conclusion,
-  ].join("\n");
+function bodyWordCount(pkg: AiArticlePackage) {
+  const text = [pkg.excerpt, ...pkg.sections.map((s) => `${s.heading} ${s.body}`), pkg.conclusion].join("\n");
   return countWords(text);
 }
 
 function normalizePackage(input: AiArticlePackage, titleFallback: string): AiArticlePackage {
+  const sections = (input.sections ?? []).filter((item) => item?.heading && item?.body);
   return {
     ...input,
     title: input.title?.trim() || titleFallback,
     excerpt: input.excerpt?.trim() || `دليل عملي حول ${titleFallback}.`,
-    h2: (input.h2 ?? []).filter(Boolean).slice(0, 10),
-    h3: (input.h3 ?? []).filter(Boolean).slice(0, 12),
-    sections: (input.sections ?? []).filter((item) => item?.heading && item?.body),
-    keyPoints: (input.keyPoints ?? []).filter(Boolean).slice(0, 14),
+    h2: (input.h2 ?? []).filter(Boolean).slice(0, 12),
+    h3: (input.h3 ?? []).filter(Boolean).slice(0, 16),
+    sections,
+    keyPoints: (input.keyPoints ?? []).filter(Boolean).slice(0, 16),
     faq: (input.faq ?? []).filter((item) => item?.q && item?.a).slice(0, 8),
     lsiKeywords: (input.lsiKeywords ?? []).filter(Boolean).slice(0, 18),
     metaTitle: (input.metaTitle ?? "").trim(),
     metaDescription: (input.metaDescription ?? "").trim(),
-    internalLinkSuggestions: (input.internalLinkSuggestions ?? [])
-      .filter((item) => item?.anchor && item?.targetTopic)
-      .slice(0, 6),
+    internalLinkSuggestions: (input.internalLinkSuggestions ?? []).filter((item) => item?.anchor && item?.targetTopic).slice(0, 6),
   };
 }
 
@@ -114,9 +106,7 @@ export async function generateArticlePackageWithAI(input: {
   relatedTitles: string[];
 }) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for AI generation");
-  }
+  if (!apiKey) throw new Error("OPENAI_API_KEY is required for AI generation");
 
   const client = new OpenAI({ apiKey });
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -124,109 +114,45 @@ export async function generateArticlePackageWithAI(input: {
   const analysis = await promptJson<AnalysisStage>({
     client,
     model,
-    system: "You are an Arabic SEO strategist. Return valid JSON only.",
-    user: `Stage 1 - Analysis for Arabic article.
-Topic: ${input.topic}
-Main category: ${input.mainCategory}
-Sub category: ${input.subCategory}
-
-Return:
-{
-  "primaryKeyword": "...",
-  "searchIntent": "تعليمي|عملي|حل مشكلة|مقارنة|تجاري",
-  "userGoal": "...",
-  "userProblem": "..."
-}`,
-    temperature: 0.3,
+    system: "You are a strict Arabic SEO strategist. Output JSON only.",
+    user: `Stage 1 Analysis:\nTopic: ${input.topic}\nMain category: ${input.mainCategory}\nSub category: ${input.subCategory}\n\nReturn JSON with: primaryKeyword, searchIntent, userGoal, userProblem`,
+    temperature: 0.2,
   });
 
   const outline = await promptJson<OutlineStage>({
     client,
     model,
-    system: "You are an Arabic content editor. Return valid JSON only.",
-    user: `Stage 2 - Outline.
-Analysis:
-${JSON.stringify(analysis, null, 2)}
-
-Build an Arabic outline (H2/H3) that serves search intent with no fluff.
-Return:
-{
-  "h1": "...",
-  "h2": ["..."],
-  "h3": ["..."],
-  "keyPoints": ["..."],
-  "faqQuestions": ["..."],
-  "lsiKeywords": ["..."],
-  "flowNote": "..."
-}`,
-    temperature: 0.4,
+    system: "You are a senior Arabic content architect. Output JSON only.",
+    user: `Stage 2 Outline based on this analysis:\n${JSON.stringify(analysis)}\n\nReturn JSON with h1, h2[], h3[], keyPoints[], faqQuestions[], lsiKeywords[], flowNote.`,
+    temperature: 0.35,
   });
 
-  const executionPrompt = `Stage 3 - Execution.
-Write the final article in Arabic only, based strictly on the analysis + outline.
-Do not show analysis/outline in output.
-
-Analysis:
-${JSON.stringify(analysis, null, 2)}
-
-Outline:
-${JSON.stringify(outline, null, 2)}
-
-Related titles for internal linking:
-${input.relatedTitles.slice(0, 15).map((title, idx) => `${idx + 1}. ${title}`).join("\n") || "- no previous articles"}
-
-Rules:
-1) Human Arabic style.
-2) Article length between 800 and 1500 words.
-3) Practical value in every section.
-4) Include real examples, actionable steps, tips, and FAQ.
-5) No fluff or repetition.
-6) Include SEO output (meta title, meta description, LSI keywords).
-7) Internal links suggestions between 2 and 5.
-
-Return JSON only:
-{
-  "searchIntent": "...",
-  "title": "...",
-  "excerpt": "...",
-  "h2": ["..."],
-  "h3": ["..."],
-  "sections": [{"heading":"...","body":"..."}],
-  "keyPoints": ["..."],
-  "faq": [{"q":"...","a":"..."}],
-  "conclusion": "...",
-  "lsiKeywords": ["..."],
-  "metaTitle": "...",
-  "metaDescription": "...",
-  "internalLinkSuggestions": [{"anchor":"...","targetTopic":"..."}]
-}`;
+  const executionPrompt = `Stage 3 Execution (Arabic article only).\nDo not output analysis or outline text; output final JSON only.\n\nAnalysis: ${JSON.stringify(analysis)}\nOutline: ${JSON.stringify(outline)}\n\nRelated titles (for internal links):\n${input.relatedTitles.slice(0, 20).map((title, i) => `${i + 1}. ${title}`).join("\n") || "- none"}\n\nHard rules:\n- Body length must be 900-1500 Arabic words (body = excerpt + sections + conclusion).\n- Practical, non-generic style with concrete examples and steps.\n- No filler, no repetition, no AI-cliche language.\n- Keep paragraphs short and useful.\n- Include FAQ and internal link suggestions (2-5).\n\nReturn JSON schema:\n{\n  "searchIntent":"...",\n  "title":"...",\n  "excerpt":"...",\n  "h2":["..."],\n  "h3":["..."],\n  "sections":[{"heading":"...","body":"..."}],\n  "keyPoints":["..."],\n  "faq":[{"q":"...","a":"..."}],\n  "conclusion":"...",\n  "lsiKeywords":["..."],\n  "metaTitle":"...",\n  "metaDescription":"...",\n  "internalLinkSuggestions":[{"anchor":"...","targetTopic":"..."}]\n}`;
 
   let pkg = normalizePackage(
     await promptJson<AiArticlePackage>({
       client,
       model,
-      system: "You are a senior Arabic writer and SEO editor. Return valid JSON only.",
+      system: "You are an Arabic senior editor and SEO specialist. Output valid JSON only.",
       user: executionPrompt,
-      temperature: 0.7,
+      temperature: 0.6,
     }),
     outline.h1 || input.topic,
   );
 
-  const words = packageWordCount(pkg);
-  if (words < 800 || words > 1500) {
+  let words = bodyWordCount(pkg);
+  if (words < 900 || pkg.sections.length < 7) {
     pkg = normalizePackage(
       await promptJson<AiArticlePackage>({
         client,
         model,
-        system: "Fix word count to 800-1500 while preserving quality. Return valid JSON only.",
-        user: `Current word count is ${words}. Rewrite to target 800-1500 words.
-Current output:
-${JSON.stringify(pkg)}
-Return the same JSON schema.`,
+        system: "Rewrite and expand the article while preserving quality. Output JSON only.",
+        user: `Current body words: ${words}, sections: ${pkg.sections.length}. Rewrite to 900-1500 words and at least 7 sections. Keep practical examples and actionable steps.\n\nCurrent JSON:\n${JSON.stringify(pkg)}`,
         temperature: 0.5,
       }),
       pkg.title || input.topic,
     );
+    words = bodyWordCount(pkg);
   }
 
   return pkg;

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 const CATEGORY_HINTS: Record<string, string[]> = {
   "فن الطهي": ["طبخ", "أكل", "وصفة", "حلو", "مطبخ", "سلطة", "كيك", "شوربة", "مشروب"],
-  "حول العالم": ["دولة", "مدينة", "سياحة", "عاصمة", "آثار", "جغرافيا"],
+  "حول العالم": ["دولة", "مدينة", "سياحة", "عاصمة", "جغرافيا", "معالم", "متاحف", "حضارة", "تاريخ"],
   "العناية بالذات": ["بشرة", "شعر", "مكياج", "عناية", "أزياء", "جمال"],
   "مال وأعمال": ["اقتصاد", "مشروع", "استثمار", "أعمال", "تجارة", "عملات"],
   "تقنية": ["تقنية", "هاتف", "انترنت", "برمجة", "كمبيوتر", "تطبيق"],
@@ -16,7 +16,20 @@ const CATEGORY_HINTS: Record<string, string[]> = {
   "حيوانات ونباتات": ["حيوان", "نبات", "زهور", "طيور", "أسماك"],
   "قصص وحكايات": ["قصة", "حكاية", "رواية"],
   "فنون": ["موسيقى", "فن", "رسم", "شعر", "أدب"],
+  "الحياة والمجتمع": ["المجتمع", "الأسرة", "المرأة", "الطلاق", "البطالة", "التسول", "العنف"],
 };
+
+function forcedMainCategory(title: string) {
+  const normalized = title.replace(/\s+/g, " ").trim();
+
+  // Effect topics (e.g. "آثار التدخين على ...") should not be treated as monuments/travel.
+  if (normalized.includes("آثار") && normalized.includes("على")) {
+    if (/(التدخين|السكر|الضغط|مرض|صحة|البشرة|الشعر|الشمس|الحروق)/.test(normalized)) return "صحة";
+    if (/(البطالة|الطلاق|التسول|العنف|المجتمع|المرأة|الأسرة)/.test(normalized)) return "الحياة والمجتمع";
+  }
+
+  return null;
+}
 
 async function ensureBaseMainCategories() {
   const baseNames = Object.keys(CATEGORY_HINTS);
@@ -76,13 +89,20 @@ export async function classifyTopic(title: string): Promise<{ mainCategory: Cate
   const mainCategories = categories.filter((cat) => cat.level === 1);
   const subCategories = categories.filter((cat) => cat.level === 2);
 
+  const forcedMain = forcedMainCategory(title);
+
   let winnerMain = mainCategories[0];
-  let maxMainScore = -1;
-  for (const main of mainCategories) {
-    const score = scoreMainCategory(title, main.name);
-    if (score > maxMainScore) {
-      maxMainScore = score;
-      winnerMain = main;
+  if (forcedMain) {
+    const forced = mainCategories.find((item) => item.name === forcedMain);
+    if (forced) winnerMain = forced;
+  } else {
+    let maxMainScore = -1;
+    for (const main of mainCategories) {
+      const score = scoreMainCategory(title, main.name);
+      if (score > maxMainScore) {
+        maxMainScore = score;
+        winnerMain = main;
+      }
     }
   }
 
