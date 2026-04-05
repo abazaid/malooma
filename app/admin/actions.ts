@@ -449,6 +449,7 @@ export async function saveModelSettingsAction(formData: FormData): Promise<void>
   const article = String(formData.get("articleSettings") ?? "").trim();
   const optimization = String(formData.get("optimizationSettings") ?? "").trim();
 
+  let saveFailed = false;
   try {
     await saveModelSettings({
       general: general || DEFAULT_GENERAL_SETTINGS,
@@ -456,8 +457,13 @@ export async function saveModelSettingsAction(formData: FormData): Promise<void>
       optimization: optimization || DEFAULT_OPTIMIZATION_SETTINGS,
     });
     revalidatePath("/admin/model-settings");
-    redirect(`/admin/model-settings?notice=${encodeURIComponent("تم حفظ إعدادات الموديل وتفعيلها للتوليد القادم")}`);
   } catch {
+    saveFailed = true;
+  }
+
+  if (saveFailed) {
     redirect(`/admin/model-settings?error=${encodeURIComponent("تعذر حفظ إعدادات الموديل. تحقق من DATABASE_URL")}`);
   }
+
+  redirect(`/admin/model-settings?notice=${encodeURIComponent("تم حفظ إعدادات الموديل وتفعيلها للتوليد القادم")}`);
 }
