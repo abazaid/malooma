@@ -10,6 +10,8 @@ function parseMarkdownLinks(content: string) {
 }
 
 function renderBlock(section: ArticleModel["sections"][number]) {
+  const markdownLinks = parseMarkdownLinks(section.content);
+
   switch (section.blockType) {
     case "heading":
       return <h2 className="mt-8 text-2xl font-bold text-slate-900">{section.heading}</h2>;
@@ -86,6 +88,23 @@ function renderBlock(section: ArticleModel["sections"][number]) {
       );
     }
     default:
+      if (markdownLinks.length > 1 && section.content.includes("- [")) {
+        return (
+          <section className="my-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="mb-3 text-base font-bold text-slate-900">{section.heading || "مقالات مرتبطة"}</h3>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {markdownLinks.map((link) => (
+                <li key={`${section.id}-parsed-${link.href}`}>
+                  <Link href={link.href} className="block rounded border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      }
+
       return (
         <section className="my-4">
           {section.heading ? <h2 className="mb-2 text-2xl font-bold text-slate-900">{section.heading}</h2> : null}
@@ -154,13 +173,11 @@ export function ArticleBody({ article }: { article: ArticleModel }) {
 
       <section className="my-8 rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="mb-3 text-xl font-bold text-slate-900">مواضيع ذات صلة</h2>
-        <ul className="grid gap-3 sm:grid-cols-2">
+        <ul className="grid gap-2 sm:grid-cols-2">
           {article.relatedArticles.map((related) => (
             <li key={related.slug}>
-              <Link href={`/articles/${related.slug}`} className="block overflow-hidden rounded border border-slate-200 hover:bg-slate-50">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={related.heroImage} alt={related.title} loading="lazy" className="h-24 w-full object-cover" />
-                <div className="px-3 py-2 text-sm">{related.title}</div>
+              <Link href={`/articles/${related.slug}`} className="block rounded border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">
+                {related.title}
               </Link>
             </li>
           ))}
