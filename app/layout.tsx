@@ -39,6 +39,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl" className={`${droidArabicKufi.variable} h-full`}>
+      <head>
+        <script
+          async
+          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${googleAdsenseId}`}
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className="min-h-full bg-slate-100 font-sans text-slate-900 antialiased">
         <Script async src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`} />
         <Script id="google-analytics">
@@ -49,12 +56,6 @@ export default function RootLayout({
             gtag('config', '${googleAnalyticsId}');
           `}
         </Script>
-        <Script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"
-          data-ad-client={googleAdsenseId}
-          crossOrigin="anonymous"
-        />
         <JsonLd
           data={{
             "@context": "https://schema.org",
