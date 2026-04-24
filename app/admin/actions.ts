@@ -4,15 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { slugifyArabic } from "@/lib/slug";
-import { enqueueManualTopic, intakeTopicsFromReference } from "@/lib/pipeline/topic-intake";
-import { processPendingImages, publishDueArticles, publishScheduledNow, runContentPipeline } from "@/lib/pipeline/engine";
-import { importReferenceTaxonomyToDb } from "@/lib/pipeline/taxonomy-import";
-import {
-  DEFAULT_ARTICLE_SETTINGS,
-  DEFAULT_GENERAL_SETTINGS,
-  DEFAULT_OPTIMIZATION_SETTINGS,
-  saveModelSettings,
-} from "@/lib/pipeline/model-settings";
 
 type ActionResult = { ok: boolean; message: string };
 
@@ -51,16 +42,6 @@ export async function createCategoryAction(formData: FormData): Promise<void> {
     });
     revalidatePath("/");
     revalidatePath("/admin/categories");
-    revalidateSeoPaths();
-  });
-}
-
-export async function importReferenceTaxonomyAction(): Promise<void> {
-  await withGuard(async () => {
-    await importReferenceTaxonomyToDb();
-    revalidatePath("/admin/categories");
-    revalidatePath("/admin/pipeline");
-    revalidatePath("/");
     revalidateSeoPaths();
   });
 }
@@ -263,7 +244,6 @@ export async function toggleArticleStatusAction(formData: FormData): Promise<voi
     });
 
     revalidatePath("/admin/articles");
-    revalidatePath("/admin/pipeline");
     revalidatePath("/");
     revalidatePath("/latest");
     revalidatePath("/popular");
@@ -321,151 +301,4 @@ export async function setTrendingAction(formData: FormData): Promise<void> {
     revalidatePath("/");
     revalidatePath("/admin/trending");
   });
-}
-
-export async function addTopicToQueueAction(formData: FormData): Promise<void> {
-  const title = String(formData.get("title") ?? "").trim();
-  if (!title) return;
-
-  try {
-    await enqueueManualTopic(title);
-    revalidatePath("/admin/pipeline");
-    redirect(`/admin/pipeline?notice=${encodeURIComponent("تمت إضافة الموضوع إلى قائمة الانتظار")}`);
-  } catch {
-    redirect(`/admin/pipeline?error=${encodeURIComponent("تعذر إضافة الموضوع. تحقق من DATABASE_URL")}`);
-  }
-}
-
-export async function importAllReferenceTopicsAction(): Promise<void> {
-  try {
-    await intakeTopicsFromReference();
-    revalidatePath("/admin/pipeline");
-    redirect(`/admin/pipeline?notice=${encodeURIComponent("تم استيراد المواضيع من reference-data")}`);
-  } catch {
-    redirect(`/admin/pipeline?error=${encodeURIComponent("فشل استيراد المواضيع. تحقق من اتصال قاعدة البيانات")}`);
-  }
-}
-
-export async function runPipelineNowAction(): Promise<void> {
-  try {
-    await runContentPipeline({ intake: false, dailyLimit: 10, scheduleBatch: 10 });
-    revalidatePath("/admin/pipeline");
-    revalidatePath("/admin");
-    redirect(`/admin/pipeline?notice=${encodeURIComponent("تم بدء تشغيل الـ Pipeline")}`);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown pipeline error";
-    redirect(`/admin/pipeline?error=${encodeURIComponent(`تعذر تشغيل الـ Pipeline: ${message}`)}`);
-  }
-}
-
-export async function startManualPublishingSystemAction(): Promise<void> {
-  try {
-    // Manual run outside cron. This does not alter cron schedules.
-    await runContentPipeline({ intake: false, dailyLimit: 10, scheduleBatch: 10 });
-    revalidatePath("/admin/pipeline");
-    revalidatePath("/admin");
-    redirect(`/admin/pipeline?notice=${encodeURIComponent("بدأ نظام النشر الآن (2 Clusters = 10 مقالات)")}`);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown pipeline error";
-    redirect(`/admin/pipeline?error=${encodeURIComponent(`فشل بدء نظام النشر: ${message}`)}`);
-  }
-}
-
-export async function publishDueNowAction(): Promise<void> {
-  try {
-    const due = await publishDueArticles(10);
-    const forced = due.published === 0 ? await publishScheduledNow(10) : { published: 0 };
-    const total = due.published + forced.published;
-
-    revalidatePath("/admin/pipeline");
-    revalidatePath("/admin");
-    revalidatePath("/");
-    revalidatePath("/latest");
-
-    if (total > 0) {
-      redirect(`/admin/pipeline?notice=${encodeURIComponent(`تم نشر ${total} مقالات الآن`)}`);
-    }
-    redirect(`/admin/pipeline?notice=${encodeURIComponent("لا توجد مقالات جاهزة للنشر الآن")}`);
-  } catch {
-    redirect(`/admin/pipeline?error=${encodeURIComponent("تعذر نشر المستحق الآن. تحقق من السجلات")}`);
-  }
-}
-
-export async function processImagesNowAction(): Promise<void> {
-  try {
-    const result = await processPendingImages(10);
-    revalidatePath("/admin/pipeline");
-    revalidatePath("/");
-    redirect(`/admin/pipeline?notice=${encodeURIComponent(`تمت معالجة ${result.generated} صور`)}`);
-  } catch {
-    redirect(`/admin/pipeline?error=${encodeURIComponent("فشلت معالجة الصور. تحقق من مفتاح OpenAI")}`);
-  }
-}
-
-export async function deleteTopicAction(formData: FormData): Promise<void> {
-  const topicId = String(formData.get("topicId") ?? "").trim();
-  if (!topicId) return;
-
-  try {
-    const topic = await prisma.topicQueue.findUnique({
-      where: { id: topicId },
-      include: {
-        article: {
-          select: {
-            id: true,
-            status: true,
-          },
-        },
-      },
-    });
-
-    if (!topic) {
-      redirect(`/admin/pipeline?error=${encodeURIComponent("الموضوع غير موجود")}`);
-    }
-
-    if (topic?.article) {
-      if (topic.article.status === "PUBLISHED") {
-        await prisma.article.update({
-          where: { id: topic.article.id },
-          data: { topicId: null },
-        });
-      } else {
-        await prisma.article.delete({ where: { id: topic.article.id } });
-      }
-    }
-
-    await prisma.topicQueue.delete({ where: { id: topicId } });
-    revalidatePath("/admin/pipeline");
-    revalidatePath("/");
-    revalidatePath("/latest");
-    revalidatePath("/popular");
-    revalidateSeoPaths();
-    redirect(`/admin/pipeline?notice=${encodeURIComponent("تم حذف الموضوع بنجاح")}`);
-  } catch {
-    redirect(`/admin/pipeline?error=${encodeURIComponent("تعذر حذف الموضوع. قد يكون مرتبطًا بسجل آخر")}`);
-  }
-}
-
-export async function saveModelSettingsAction(formData: FormData): Promise<void> {
-  const general = String(formData.get("generalSettings") ?? "").trim();
-  const article = String(formData.get("articleSettings") ?? "").trim();
-  const optimization = String(formData.get("optimizationSettings") ?? "").trim();
-
-  let saveFailed = false;
-  try {
-    await saveModelSettings({
-      general: general || DEFAULT_GENERAL_SETTINGS,
-      article: article || DEFAULT_ARTICLE_SETTINGS,
-      optimization: optimization || DEFAULT_OPTIMIZATION_SETTINGS,
-    });
-    revalidatePath("/admin/model-settings");
-  } catch {
-    saveFailed = true;
-  }
-
-  if (saveFailed) {
-    redirect(`/admin/model-settings?error=${encodeURIComponent("تعذر حفظ إعدادات الموديل. تحقق من DATABASE_URL")}`);
-  }
-
-  redirect(`/admin/model-settings?notice=${encodeURIComponent("تم حفظ إعدادات الموديل وتفعيلها للتوليد القادم")}`);
 }
