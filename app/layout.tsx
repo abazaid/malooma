@@ -14,6 +14,7 @@ const droidArabicKufi = localFont({
 });
 
 const googleAnalyticsId = "G-GWPTCKDRZG";
+const googleAdsenseId = "ca-pub-8046020805959286";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://malooma.org"),
@@ -48,6 +49,12 @@ export default function RootLayout({
             gtag('config', '${googleAnalyticsId}');
           `}
         </Script>
+        <Script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"
+          data-ad-client={googleAdsenseId}
+          crossOrigin="anonymous"
+        />
         <JsonLd
           data={{
             "@context": "https://schema.org",
