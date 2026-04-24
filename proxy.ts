@@ -1,5 +1,19 @@
-﻿import type { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+
+function wantsMarkdown(request: NextRequest) {
+  const accept = request.headers.get("accept") ?? "";
+  return request.method === "GET" && accept.toLowerCase().includes("text/markdown");
+}
+
+function canServeMarkdown(pathname: string) {
+  if (pathname.startsWith("/admin")) return false;
+  if (pathname.startsWith("/markdown")) return false;
+  if (pathname.startsWith("/_next")) return false;
+  if (pathname.startsWith("/api")) return false;
+  if (/\.(?:css|js|map|json|xml|txt|ico|png|jpg|jpeg|webp|svg|woff|woff2)$/i.test(pathname)) return false;
+  return true;
+}
 
 function unauthorizedResponse() {
   return new NextResponse("Authentication required", {
@@ -11,6 +25,19 @@ function unauthorizedResponse() {
 }
 
 export function proxy(request: NextRequest) {
+  if (wantsMarkdown(request) && canServeMarkdown(request.nextUrl.pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/markdown";
+    url.searchParams.set("path", request.nextUrl.pathname);
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-markdown-path", request.nextUrl.pathname);
+    return NextResponse.rewrite(url, {
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  }
+
   if (!request.nextUrl.pathname.startsWith("/admin")) {
     return NextResponse.next();
   }
@@ -39,6 +66,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
-

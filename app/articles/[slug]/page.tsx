@@ -7,6 +7,7 @@ import { Breadcrumbs } from "@/components/content/breadcrumbs";
 import { JsonLd } from "@/components/seo/json-ld";
 import { contentRepository } from "@/lib/repositories/content-repository";
 import { buildMetadata } from "@/lib/seo";
+import { siteConfig, siteLogoUrl } from "@/lib/site";
 import { absoluteUrl, formatArabicDate } from "@/lib/utils";
 
 type Props = {
@@ -18,7 +19,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const article = await contentRepository.getArticleBySlug(slug);
 
   if (!article) {
-    return buildMetadata({ title: "مقال غير موجود", description: "المقال المطلوب غير متوفر.", path: "/404", noIndex: true });
+    return buildMetadata({
+      title: "مقال غير موجود",
+      description: "المقال المطلوب غير متوفر.",
+      path: "/404",
+      noIndex: true,
+    });
   }
 
   return buildMetadata({
@@ -41,6 +47,22 @@ export default async function ArticlePage({ params }: Props) {
     contentRepository.getCategoryBySlug(article.categorySlug),
   ]);
 
+  const articleUrl = absoluteUrl(`/articles/${article.slug}`);
+  const articleImage = absoluteUrl(article.heroImage);
+  const authorSchema = {
+    "@type": "Person",
+    name: article.author.name,
+    url: absoluteUrl(`/authors/${article.author.slug}`),
+    jobTitle: article.author.jobTitle ?? "كاتب محتوى",
+    worksFor: {
+      "@type": "Organization",
+      name: siteConfig.name,
+      url: absoluteUrl("/"),
+    },
+    knowsAbout: article.author.knowsAbout ?? article.keywords,
+    sameAs: article.author.sameAs,
+  };
+
   return (
     <article className="space-y-6">
       <JsonLd
@@ -55,7 +77,7 @@ export default async function ArticlePage({ params }: Props) {
               name: article.categoryName,
               item: absoluteUrl(`/categories/${article.categorySlug}`),
             },
-            { "@type": "ListItem", position: 3, name: article.title, item: absoluteUrl(`/articles/${article.slug}`) },
+            { "@type": "ListItem", position: 3, name: article.title, item: articleUrl },
           ],
         }}
       />
@@ -66,33 +88,47 @@ export default async function ArticlePage({ params }: Props) {
           "@type": "Article",
           headline: article.title,
           description: article.excerpt,
+          inLanguage: "ar",
           datePublished: article.publishedAt,
           dateModified: article.updatedAt,
-          author: { "@type": "Person", name: article.author.name },
-          image: [article.heroImage],
-          mainEntityOfPage: article.canonical,
+          author: authorSchema,
+          image: {
+            "@type": "ImageObject",
+            url: articleImage,
+            width: 1200,
+            height: 630,
+          },
+          mainEntityOfPage: article.canonical || articleUrl,
+          speakable: {
+            "@type": "SpeakableSpecification",
+            cssSelector: ["article h1", "[data-speakable='quick-answer']", "article section p:first-of-type"],
+          },
           publisher: {
             "@type": "Organization",
-            name: "معلومة",
-            logo: { "@type": "ImageObject", url: absoluteUrl("/favicon.ico") },
+            name: siteConfig.name,
+            url: absoluteUrl("/"),
+            logo: { "@type": "ImageObject", url: siteLogoUrl(), width: 1200, height: 630 },
           },
         }}
       />
 
-      <JsonLd
-        data={{
-          "@context": "https://schema.org",
-          "@type": "FAQPage",
-          mainEntity: article.faqs.map((faq) => ({
-            "@type": "Question",
-            name: faq.question,
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: faq.answer,
-            },
-          })),
-        }}
-      />
+      {article.faqs.length > 0 ? (
+        <JsonLd
+          data={{
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            inLanguage: "ar",
+            mainEntity: article.faqs.map((faq) => ({
+              "@type": "Question",
+              name: faq.question,
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: faq.answer,
+              },
+            })),
+          }}
+        />
+      ) : null}
 
       <Breadcrumbs
         items={[
@@ -109,20 +145,20 @@ export default async function ArticlePage({ params }: Props) {
             <p className="mb-2 text-sm font-semibold text-teal-700">{article.subcategoryName}</p>
             <h1 className="text-3xl font-black leading-tight text-slate-900 md:text-4xl">{article.title}</h1>
             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-600 md:text-sm">
-              <span>الكاتب: {article.author.name}</span>
-              <span>•</span>
-              <span>التدقيق: {article.reviewer?.name}</span>
-              <span>•</span>
-              <span>نُشر: {formatArabicDate(article.publishedAt)}</span>
-              <span>•</span>
+              <Link href={`/authors/${article.author.slug}`}>الكاتب: {article.author.name}</Link>
+              <span>-</span>
+              <span>التدقيق: {article.reviewer?.name ?? "فريق التحرير"}</span>
+              <span>-</span>
+              <span>نشر: {formatArabicDate(article.publishedAt)}</span>
+              <span>-</span>
               <span>آخر تحديث: {formatArabicDate(article.updatedAt)}</span>
-              <span>•</span>
+              <span>-</span>
               <span>{article.readingMinutes} دقائق قراءة</span>
             </div>
 
             <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={article.heroImage} alt={article.title} className="h-full w-full object-cover" loading="lazy" />
+              <img src={article.heroImage} alt={`صورة توضيحية لمقال ${article.title}`} className="h-full w-full object-cover" loading="lazy" />
             </div>
           </header>
 
@@ -163,4 +199,3 @@ export default async function ArticlePage({ params }: Props) {
     </article>
   );
 }
-

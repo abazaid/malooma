@@ -4,6 +4,7 @@ import { cache } from "react";
 import fs from "node:fs";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
+import { siteConfig } from "@/lib/site";
 import { absoluteUrl } from "@/lib/utils";
 import {
   loadReferenceArticleSeeds,
@@ -24,18 +25,24 @@ const AUTHORS: AuthorSummary[] = [
     slug: "فريق-التحرير",
     name: "فريق التحرير",
     bio: "فريق متخصص في إنتاج محتوى عربي موثوق ومنظم وفق معايير تحرير وتدقيق واضحة.",
+    jobTitle: "فريق تحرير ومراجعة",
+    knowsAbout: ["تحرير المحتوى", "تدقيق المعلومات", "المعرفة العربية"],
   },
   {
     id: "author-2",
     slug: "نورا-العلي",
     name: "نورا العلي",
     bio: "كاتبة محتوى معرفي تركز على تبسيط الموضوعات المعقدة للقارئ العربي.",
+    jobTitle: "كاتبة محتوى معرفي",
+    knowsAbout: ["التعليم", "الثقافة العامة", "تبسيط المعلومات"],
   },
   {
     id: "author-3",
     slug: "سالم-الحربي",
     name: "سالم الحربي",
     bio: "محرر متخصص في التقنية والاقتصاد الرقمي.",
+    jobTitle: "محرر تقنية واقتصاد رقمي",
+    knowsAbout: ["التقنية", "الأعمال الرقمية", "أمن المعلومات"],
   },
 ];
 
@@ -45,6 +52,8 @@ const REVIEWERS: AuthorSummary[] = [
     slug: "لجنة-التدقيق",
     name: "لجنة التدقيق",
     bio: "مراجعة جودة المحتوى والتحقق من الاتساق والمنهجية.",
+    jobTitle: "مراجعة تحريرية",
+    knowsAbout: ["تدقيق الحقائق", "المراجعة اللغوية", "سياسات النشر"],
   },
 ];
 
@@ -65,7 +74,7 @@ const STATIC_PAGES: StaticPageModel[] = [
     slug: "contact",
     title: "اتصل بنا",
     description: "قنوات التواصل مع فريق التحرير والدعم.",
-    body: "للاقتراحات والتصحيحات واستفسارات الشراكات، يمكن التواصل عبر البريد: contact@example.com. نراجع الرسائل خلال أيام العمل.",
+    body: `للاقتراحات والتصحيحات واستفسارات الشراكات، يمكن التواصل مع فريق التحرير عبر البريد: ${siteConfig.editorialEmail}. مقر النشر التشغيلي: ${siteConfig.country}. نراجع الرسائل خلال أيام العمل.`,
   },
   {
     slug: "privacy",
@@ -124,6 +133,11 @@ function resolveHeroImage(slug: string, heroUrl?: string | null) {
   return fs.existsSync(localPath) ? heroUrl : buildSeedImage(slug);
 }
 
+function normalizeAuthorDisplayName(name: string) {
+  const normalized = name.trim();
+  return normalized === "محرك المحتوى" || normalized.toLowerCase() === "content engine" ? "فريق التحرير" : normalized;
+}
+
 function paginate<T>(items: T[], page: number, pageSize = PAGE_SIZE) {
   const safePage = Math.max(1, page);
   const start = (safePage - 1) * pageSize;
@@ -163,7 +177,7 @@ function toCardFromDbArticle(article: {
     author: {
       id: article.author.id,
       slug: article.author.slug,
-      name: article.author.displayName,
+      name: normalizeAuthorDisplayName(article.author.displayName),
       bio: article.author.bio ?? "",
     },
   };
@@ -643,7 +657,7 @@ export const contentRepository = {
               author: {
                 id: related.author.id,
                 slug: related.author.slug,
-                name: related.author.displayName,
+                name: normalizeAuthorDisplayName(related.author.displayName),
                 bio: related.author.bio ?? "",
               },
             };
@@ -665,7 +679,7 @@ export const contentRepository = {
             author: {
               id: dbArticle.author.id,
               slug: dbArticle.author.slug,
-              name: dbArticle.author.displayName,
+              name: normalizeAuthorDisplayName(dbArticle.author.displayName),
               bio: dbArticle.author.bio ?? "",
             },
             reviewer: dbArticle.reviewer
@@ -727,18 +741,33 @@ export const contentRepository = {
           loadDbMainCategories(),
           prisma.article.findMany({
             where: { status: "PUBLISHED" },
-            select: { slug: true, heroMedia: { select: { url: true } } },
+            select: {
+              slug: true,
+              updatedAt: true,
+              publishedAt: true,
+              createdAt: true,
+              heroMedia: { select: { url: true } },
+            },
           }),
         ]);
 
         if (categories) {
-          const categoryUrls = categories.flatMap((main) => [
-            absoluteUrl(`/categories/${main.slug}`),
-            ...main.subcategories.map((sub) => absoluteUrl(`/categories/${main.slug}/${sub.slug}`)),
-          ]);
+          const categoryUrls = [
+            absoluteUrl("/categories"),
+            ...categories.flatMap((main) => [
+              absoluteUrl(`/categories/${main.slug}`),
+              ...main.subcategories.map((sub) => absoluteUrl(`/categories/${main.slug}/${sub.slug}`)),
+            ]),
+          ];
 
-          const articleUrls = articles.map((article) => absoluteUrl(`/articles/${article.slug}`));
-          const imageUrls = articles.map((article) => article.heroMedia?.url).filter((url): url is string => Boolean(url));
+          const articleUrls = articles.map((article) => ({
+            loc: absoluteUrl(`/articles/${article.slug}`),
+            lastmod: article.updatedAt.toISOString(),
+          }));
+          const imageUrls = articles
+            .map((article) => article.heroMedia?.url)
+            .filter((url): url is string => Boolean(url))
+            .map((url) => absoluteUrl(url));
 
           return {
             categories: categoryUrls,
@@ -752,17 +781,23 @@ export const contentRepository = {
     }
 
     const memory = await buildMemoryDataset();
-    const categories = memory.mainCategories.flatMap((main) => [
-      absoluteUrl(`/categories/${main.slug}`),
-      ...main.subcategories.map((sub) => absoluteUrl(`/categories/${main.slug}/${sub.slug}`)),
-    ]);
+    const categories = [
+      absoluteUrl("/categories"),
+      ...memory.mainCategories.flatMap((main) => [
+        absoluteUrl(`/categories/${main.slug}`),
+        ...main.subcategories.map((sub) => absoluteUrl(`/categories/${main.slug}/${sub.slug}`)),
+      ]),
+    ];
 
-    const articles = memory.articles.map((article) => absoluteUrl(`/articles/${article.slug}`));
+    const articles = memory.articles.map((article) => ({
+      loc: absoluteUrl(`/articles/${article.slug}`),
+      lastmod: new Date(article.publishedAt).toISOString(),
+    }));
 
     return {
       categories,
       articles,
-      images: memory.articles.map((article) => article.heroImage),
+      images: memory.articles.map((article) => absoluteUrl(article.heroImage)),
     };
   }),
 

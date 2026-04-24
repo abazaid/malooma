@@ -117,8 +117,8 @@ function renderBlock(section: ArticleModel["sections"][number]) {
 export function ArticleBody({ article }: { article: ArticleModel }) {
   return (
     <>
-      <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sky-900">
-        <p className="text-sm font-bold">ملخص سريع</p>
+      <div data-speakable="quick-answer" className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sky-900">
+        <p className="text-sm font-bold">إجابة سريعة</p>
         <p className="mt-1 text-sm leading-7">{article.excerpt}</p>
       </div>
 

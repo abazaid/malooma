@@ -5,6 +5,7 @@ import "./globals.css";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { JsonLd } from "@/components/seo/json-ld";
+import { siteConfig, siteLogoUrl } from "@/lib/site";
 import { absoluteUrl } from "@/lib/utils";
 
 const droidArabicKufi = localFont({
@@ -18,17 +19,28 @@ const googleAdsenseId = "ca-pub-8046020805959286";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://malooma.org"),
-  title: "معلومة",
-  description: "منصة محتوى عربية واسعة التنظيم، سريعة، ومهيأة تقنيًا لمحركات البحث.",
+  title: siteConfig.name,
+  description: siteConfig.description,
   alternates: {
     canonical: absoluteUrl("/"),
+    languages: {
+      ar: absoluteUrl("/"),
+      "ar-SA": absoluteUrl("/"),
+    },
   },
   openGraph: {
-    title: "معلومة",
-    description: "مقالات عربية منظّمة ضمن تصنيفات واضحة وتجربة قراءة عملية.",
+    title: siteConfig.name,
+    description: siteConfig.description,
     type: "website",
     locale: "ar_SA",
     url: absoluteUrl("/"),
+    images: [{ url: siteLogoUrl(), width: 1200, height: 630, alt: siteConfig.name }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: siteConfig.name,
+    description: siteConfig.description,
+    images: [siteLogoUrl()],
   },
 };
 
@@ -60,18 +72,34 @@ export default function RootLayout({
           data={{
             "@context": "https://schema.org",
             "@type": "Organization",
-            name: "معلومة",
+            name: siteConfig.name,
+            alternateName: siteConfig.latinName,
             url: absoluteUrl("/"),
-            logo: absoluteUrl("/favicon.ico"),
-            sameAs: ["https://www.facebook.com", "https://x.com", "https://instagram.com"],
+            description: siteConfig.description,
+            foundingDate: siteConfig.foundingDate,
+            areaServed: "Arabic-speaking countries",
+            email: siteConfig.editorialEmail,
+            address: {
+              "@type": "PostalAddress",
+              addressCountry: siteConfig.country,
+            },
+            logo: {
+              "@type": "ImageObject",
+              url: siteLogoUrl(),
+              width: 1200,
+              height: 630,
+            },
+            sameAs: siteConfig.socialLinks,
           }}
         />
         <JsonLd
           data={{
             "@context": "https://schema.org",
             "@type": "WebSite",
-            name: "معلومة",
+            name: siteConfig.name,
+            alternateName: siteConfig.latinName,
             url: absoluteUrl("/"),
+            inLanguage: "ar",
             potentialAction: {
               "@type": "SearchAction",
               target: `${absoluteUrl("/search/results")}?q={search_term_string}`,

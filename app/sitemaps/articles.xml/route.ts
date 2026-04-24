@@ -8,7 +8,10 @@ export async function GET() {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${payload.articles
   .slice(0, 50000)
-  .map((loc) => `<url><loc>${loc}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`)
+  .map(
+    (article) =>
+      `<url><loc>${article.loc}</loc><lastmod>${article.lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>`,
+  )
   .join("\n")}
 </urlset>`;
 

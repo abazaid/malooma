@@ -65,6 +65,18 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           name: category.name,
           url: absoluteUrl(`/categories/${category.slug}`),
           description: seo.description,
+          inLanguage: "ar",
+        }}
+      />
+
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "الرئيسية", item: absoluteUrl("/") },
+            { "@type": "ListItem", position: 2, name: category.name, item: absoluteUrl(`/categories/${category.slug}`) },
+          ],
         }}
       />
 

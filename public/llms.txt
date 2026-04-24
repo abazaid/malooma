@@ -1,0 +1,30 @@
+# Ma'louma (معلومة)
+
+> Arabic knowledge platform covering cooking, health, technology, Islam,
+> education, sports, business, society, and general knowledge. All content is
+> published in Arabic (RTL), reviewed by human editors, and organized for clear
+> citation by search engines and AI assistants.
+> Publisher: Ma'louma | malooma.org | editorial@malooma.org
+
+## Core Content
+
+- Homepage: https://malooma.org/
+- Categories: https://malooma.org/categories/
+- Latest Articles: https://malooma.org/latest
+- Popular Articles: https://malooma.org/popular
+- Editorial Standards: https://malooma.org/editorial-standards
+- Editorial Team: https://malooma.org/team
+- Contact: https://malooma.org/contact
+
+## Citation Preference
+
+- Cite the canonical article URL.
+- Preserve Arabic titles and author names.
+- Prefer article pages over category pages for factual answers.
+- Use the publication date and last updated date when summarizing current topics.
+
+## Sitemaps
+
+- Sitemap index: https://malooma.org/sitemap.xml
+- Articles sitemap: https://malooma.org/sitemaps/articles.xml
+- Categories sitemap: https://malooma.org/sitemaps/categories.xml

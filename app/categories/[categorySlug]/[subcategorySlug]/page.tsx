@@ -68,6 +68,24 @@ export default async function SubcategoryPage({ params, searchParams }: Props) {
           url: absoluteUrl(`/categories/${category.slug}/${subcategory.slug}`),
           description: seo.description,
           isPartOf: absoluteUrl(`/categories/${category.slug}`),
+          inLanguage: "ar",
+        }}
+      />
+
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "الرئيسية", item: absoluteUrl("/") },
+            { "@type": "ListItem", position: 2, name: category.name, item: absoluteUrl(`/categories/${category.slug}`) },
+            {
+              "@type": "ListItem",
+              position: 3,
+              name: subcategory.name,
+              item: absoluteUrl(`/categories/${category.slug}/${subcategory.slug}`),
+            },
+          ],
         }}
       />
 

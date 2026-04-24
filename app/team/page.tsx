@@ -23,8 +23,18 @@ export default async function TeamPage() {
       <section className="grid gap-4 md:grid-cols-2">
         {authors.map((author) => (
           <article key={author.id} className="rounded-xl border border-slate-200 bg-white p-5">
+            <p className="text-xs font-semibold text-teal-700">{author.jobTitle ?? "كاتب محتوى"}</p>
             <h2 className="text-xl font-bold text-slate-900">{author.name}</h2>
             <p className="mt-2 text-sm leading-7 text-slate-700">{author.bio}</p>
+            {author.knowsAbout?.length ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {author.knowsAbout.map((item) => (
+                  <span key={item} className="rounded border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600">
+                    {item}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <Link href={`/authors/${author.slug}`} className="mt-4 inline-block text-sm font-bold text-sky-700 hover:underline">
               عرض صفحة الكاتب
             </Link>

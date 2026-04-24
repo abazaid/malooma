@@ -15,6 +15,7 @@ import { generateArticlePackageWithAI } from "@/lib/pipeline/ai-generator";
 import { slugifyArabic } from "@/lib/slug";
 import { ensureContributorPools, pickRandomItem } from "@/lib/pipeline/author-pool";
 import { generateCoverImage } from "@/lib/pipeline/cover-image";
+import { siteConfig, siteLogoUrl } from "@/lib/site";
 import { jaccardSimilarity, sharedCoreTokenCount, topicCoherenceScore } from "@/lib/pipeline/text-utils";
 import { logPipelineEvent } from "@/lib/pipeline/events";
 
@@ -37,9 +38,26 @@ function buildArticleSchema(article: { title: string; slug: string; excerpt: str
     datePublished: article.publishedAt?.toISOString() ?? new Date().toISOString(),
     keywords: article.keywords,
     author: {
-      "@type": "Organization",
-      name: "معلومة",
+      "@type": "Person",
+      name: "فريق التحرير",
+      url: `${SITE_ORIGIN}/authors/فريق-التحرير`,
+      worksFor: {
+        "@type": "Organization",
+        name: siteConfig.name,
+        url: SITE_ORIGIN,
+      },
     },
+    publisher: {
+      "@type": "Organization",
+      name: siteConfig.name,
+      logo: {
+        "@type": "ImageObject",
+        url: siteLogoUrl(),
+        width: 1200,
+        height: 630,
+      },
+    },
+    inLanguage: "ar",
   };
 }
 
@@ -246,7 +264,7 @@ async function processSingleTopic(topicId: string, runKey?: string) {
         articleId: article.id,
         orderNo: faqOrder++,
         question: faq.q,
-        answer: `${faq.aHint} ويُنصح بالبدء بخطة واضحة ثم القياس والتحسين المستمر.`,
+        answer: faq.aHint,
       },
     });
   }

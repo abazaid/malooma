@@ -201,7 +201,7 @@ async function main() {
         articleId: article.id,
         orderNo: 1,
         title: "مرجع داخلي",
-        url: `https://example.com/${slug}`,
+        url: `https://malooma.org/categories/${category.slug}`,
         publisher: "معلومة",
       },
     });
@@ -231,7 +231,7 @@ async function main() {
   const staticPages = [
     ["about", "عن المنصة", "محتوى تعريفي بالمنصة"],
     ["editorial-standards", "معايير التدقيق", "شرح سياسة التحرير والتدقيق"],
-    ["contact", "اتصل بنا", "قنوات التواصل الرسمية"],
+    ["contact", "اتصل بنا", "للاقتراحات والتصحيحات واستفسارات الشراكات، يمكن التواصل مع فريق التحرير عبر البريد: editorial@malooma.org. مقر النشر التشغيلي: السعودية."],
     ["privacy", "سياسة الخصوصية", "تفاصيل جمع البيانات وحمايتها"],
     ["terms", "اتفاقية الاستخدام", "شروط الاستخدام"],
     ["team", "فريق التحرير", "تعريف فريق التحرير"],

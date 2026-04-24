@@ -1,4 +1,5 @@
-﻿import Link from "next/link";
+import Link from "next/link";
+import { siteConfig } from "@/lib/site";
 
 const footerLinks = [
   { href: "/contact", label: "اتصل بنا" },
@@ -31,17 +32,17 @@ export function SiteFooter() {
           <h2 className="mb-4 text-lg font-bold text-slate-900">تابعنا</h2>
           <ul className="mb-5 flex items-center gap-3 text-sm font-semibold text-slate-700">
             <li>
-              <a className="rounded border border-slate-300 bg-white px-3 py-1.5" href="https://www.facebook.com" rel="noreferrer" target="_blank">
+              <a className="rounded border border-slate-300 bg-white px-3 py-1.5" href={siteConfig.socialLinks[0]} rel="noreferrer" target="_blank">
                 Facebook
               </a>
             </li>
             <li>
-              <a className="rounded border border-slate-300 bg-white px-3 py-1.5" href="https://x.com" rel="noreferrer" target="_blank">
+              <a className="rounded border border-slate-300 bg-white px-3 py-1.5" href={siteConfig.socialLinks[1]} rel="noreferrer" target="_blank">
                 X
               </a>
             </li>
             <li>
-              <a className="rounded border border-slate-300 bg-white px-3 py-1.5" href="https://instagram.com" rel="noreferrer" target="_blank">
+              <a className="rounded border border-slate-300 bg-white px-3 py-1.5" href={siteConfig.socialLinks[2]} rel="noreferrer" target="_blank">
                 Instagram
               </a>
             </li>
@@ -52,4 +53,3 @@ export function SiteFooter() {
     </footer>
   );
 }
-

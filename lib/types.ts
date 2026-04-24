@@ -18,6 +18,9 @@ export type AuthorSummary = {
   slug: string;
   name: string;
   bio: string;
+  jobTitle?: string;
+  knowsAbout?: string[];
+  sameAs?: string[];
 };
 
 export type ArticleCardModel = {
