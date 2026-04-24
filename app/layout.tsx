@@ -1,5 +1,6 @@
 ﻿import type { Metadata } from "next";
 import localFont from "next/font/local";
+import Script from "next/script";
 import "./globals.css";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
@@ -11,6 +12,8 @@ const droidArabicKufi = localFont({
   variable: "--font-droid-arabic-kufi",
   display: "swap",
 });
+
+const googleAnalyticsId = "G-GWPTCKDRZG";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://malooma.org"),
@@ -36,6 +39,15 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" className={`${droidArabicKufi.variable} h-full`}>
       <body className="min-h-full bg-slate-100 font-sans text-slate-900 antialiased">
+        <Script async src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`} />
+        <Script id="google-analytics">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${googleAnalyticsId}');
+          `}
+        </Script>
         <JsonLd
           data={{
             "@context": "https://schema.org",
