@@ -21,47 +21,42 @@ enum ArticleStatus {
   ARCHIVED
 }
 
-enum TopicStatus {
-  QUEUED
-  CLEANED
-  REJECTED
-  OUTLINED
-  WRITTEN
-  SCHEDULED
-  PUBLISHED
-  SKIPPED
+enum GenerationSourceType {
+  KEYWORD
+  URL
 }
 
-enum PublishingJobStatus {
-  PENDING
-  RUNNING
-  DONE
-  FAILED
+enum GenerationStatus {
+  DRAFT
+  WAITING_REVIEW
+  NEEDS_MODIFICATION
+  APPROVED
+  PUBLISHED
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  passwordHash String
-  fullName     String
-  role         UserRole   @default(EDITOR)
-  isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id              String     @id @default(cuid())
+  email           String     @unique
+  passwordHash    String
+  fullName        String
+  role            UserRole   @default(EDITOR)
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
   authorProfile   Author?
   reviewerProfile Reviewer?
-  auditLogs    AuditLog[]
+  auditLogs       AuditLog[]
 }
 
 model Author {
-  id          String    @id @default(cuid())
-  userId      String?   @unique
-  slug        String    @unique
-  displayName String
-  bio         String?
+  id            String   @id @default(cuid())
+  userId        String?  @unique
+  slug          String   @unique
+  displayName   String
+  bio           String?
   avatarMediaId String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   avatarMedia Media?    @relation("AuthorAvatar", fields: [avatarMediaId], references: [id], onDelete: SetNull)
@@ -69,69 +64,66 @@ model Author {
 }
 
 model Reviewer {
-  id          String    @id @default(cuid())
-  userId      String?   @unique
-  slug        String    @unique
-  displayName String
-  bio         String?
+  id            String   @id @default(cuid())
+  userId        String?  @unique
+  slug          String   @unique
+  displayName   String
+  bio           String?
   avatarMediaId String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  avatarMedia Media?    @relation("ReviewerAvatar", fields: [avatarMediaId], references: [id], onDelete: SetNull)
+  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  avatarMedia      Media?    @relation("ReviewerAvatar", fields: [avatarMediaId], references: [id], onDelete: SetNull)
   reviewedArticles Article[] @relation("ArticleReviewer")
 }
 
 model Category {
-  id            String      @id @default(cuid())
-  name          String
-  slug          String      @unique
-  description   String?
-  parentId      String?
-  level         Int         @default(1)
-  isActive      Boolean     @default(true)
-  sortOrder     Int         @default(0)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  parentId    String?
+  level       Int      @default(1)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  parent        Category?   @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children      Category[]  @relation("CategoryTree")
-  articles      Article[]
-  topicMainQueue TopicQueue[] @relation("TopicMainCategory")
-  topicSubQueue  TopicQueue[] @relation("TopicSubCategory")
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
+  articles Article[]
 
   @@index([parentId])
   @@index([level])
 }
 
 model Article {
-  id              String        @id @default(cuid())
-  title           String
-  slug            String        @unique
-  excerpt         String
-  status          ArticleStatus @default(DRAFT)
-  readingMinutes  Int           @default(3)
-  publishedAt     DateTime?
-  updatedAt       DateTime      @updatedAt
-  createdAt       DateTime      @default(now())
+  id             String        @id @default(cuid())
+  title          String
+  slug           String        @unique
+  excerpt        String
+  status         ArticleStatus @default(DRAFT)
+  readingMinutes Int           @default(3)
+  publishedAt    DateTime?
+  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime      @default(now())
 
-  authorId        String
-  reviewerId      String?
-  categoryId      String
-  heroMediaId     String?
+  authorId    String
+  reviewerId  String?
+  categoryId  String
+  heroMediaId String?
 
   canonicalUrl    String?
   trustScore      Int?
   keywords        String[]
   searchIntent    String?
   imagePrompt     String?
-  topicId         String?       @unique
-
-  author          Author        @relation("ArticleAuthor", fields: [authorId], references: [id], onDelete: Restrict)
-  reviewer        Reviewer?     @relation("ArticleReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
-  category        Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  heroMedia       Media?        @relation("ArticleHero", fields: [heroMediaId], references: [id], onDelete: SetNull)
+  generationJobId String?   @unique
+  author          Author    @relation("ArticleAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  reviewer        Reviewer? @relation("ArticleReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  category        Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  heroMedia       Media?    @relation("ArticleHero", fields: [heroMediaId], references: [id], onDelete: SetNull)
 
   sections        ArticleSection[]
   faqs            ArticleFaq[]
@@ -141,10 +133,7 @@ model Article {
   seoMeta         SeoMeta?
   popularEntries  PopularArticle[]
   trendingEntries TrendingSlot[]
-  topic           TopicQueue?      @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  contentMemory   ContentMemory?
-  generatedImagePrompt GeneratedImagePrompt?
-  pipelineEvents   PipelineEvent[]
+  generationJob   GenerationJob?   @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
 
   @@index([status, publishedAt])
   @@index([categoryId, publishedAt])
@@ -152,34 +141,34 @@ model Article {
 }
 
 model ArticleSection {
-  id         String   @id @default(cuid())
-  articleId  String
-  orderNo    Int
-  blockType  String
-  heading    String?
-  content    String
-  payload    Json?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  articleId String
+  orderNo   Int
+  blockType String
+  heading   String?
+  content   String
+  payload   Json?
+  createdAt DateTime @default(now())
 
-  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@unique([articleId, orderNo])
 }
 
 model ArticleFaq {
-  id         String   @id @default(cuid())
-  articleId  String
-  orderNo    Int
-  question   String
-  answer     String
+  id        String @id @default(cuid())
+  articleId String
+  orderNo   Int
+  question  String
+  answer    String
 
-  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@unique([articleId, orderNo])
 }
 
 model ArticleSource {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   articleId   String
   orderNo     Int
   title       String
@@ -187,43 +176,43 @@ model ArticleSource {
   publisher   String?
   publishedAt DateTime?
 
-  article     Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@unique([articleId, orderNo])
 }
 
 model ArticleRelated {
-  id             String   @id @default(cuid())
-  articleId       String
+  id               String @id @default(cuid())
+  articleId        String
   relatedArticleId String
-  relevanceScore  Float    @default(0.5)
+  relevanceScore   Float  @default(0.5)
 
-  article         Article  @relation("relatedFrom", fields: [articleId], references: [id], onDelete: Cascade)
-  relatedArticle  Article  @relation("relatedTo", fields: [relatedArticleId], references: [id], onDelete: Cascade)
+  article        Article @relation("relatedFrom", fields: [articleId], references: [id], onDelete: Cascade)
+  relatedArticle Article @relation("relatedTo", fields: [relatedArticleId], references: [id], onDelete: Cascade)
 
   @@unique([articleId, relatedArticleId])
 }
 
 model StaticPage {
-  id               String   @id @default(cuid())
-  slug             String   @unique
-  title            String
-  body             String
-  isIndexed        Boolean  @default(true)
-  updatedAt        DateTime @updatedAt
-  createdAt        DateTime @default(now())
-  seoMeta          SeoMeta?
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  title     String
+  body      String
+  isIndexed Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  seoMeta   SeoMeta?
 }
 
 model TrendingSlot {
-  id          String   @id @default(cuid())
-  slotKey     String
-  articleId   String
-  startsAt    DateTime @default(now())
-  endsAt      DateTime?
-  createdAt   DateTime @default(now())
+  id        String    @id @default(cuid())
+  slotKey   String
+  articleId String
+  startsAt  DateTime  @default(now())
+  endsAt    DateTime?
+  createdAt DateTime  @default(now())
 
-  article     Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@index([slotKey, startsAt])
 }
@@ -235,153 +224,102 @@ model PopularArticle {
   windowDays   Int      @default(7)
   calculatedAt DateTime @default(now())
 
-  article      Article   @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@unique([windowDays, rankPosition])
 }
 
 model Media {
-  id           String   @id @default(cuid())
-  fileName     String
-  mimeType     String
-  width        Int?
-  height       Int?
-  altText      String?
-  storageKey   String
-  url          String
-  createdAt    DateTime @default(now())
+  id         String   @id @default(cuid())
+  fileName   String
+  mimeType   String
+  width      Int?
+  height     Int?
+  altText    String?
+  storageKey String
+  url        String
+  createdAt  DateTime @default(now())
 
-  heroForArticles Article[] @relation("ArticleHero")
-  authorAvatars   Author[]  @relation("AuthorAvatar")
+  heroForArticles Article[]  @relation("ArticleHero")
+  authorAvatars   Author[]   @relation("AuthorAvatar")
   reviewerAvatars Reviewer[] @relation("ReviewerAvatar")
 }
 
 model SeoMeta {
-  id               String   @id @default(cuid())
-  metaTitle        String
-  metaDescription  String
-  canonicalUrl     String?
-  noIndex          Boolean  @default(false)
-  ogImageUrl       String?
-  schemaJson       Json?
+  id              String  @id @default(cuid())
+  metaTitle       String
+  metaDescription String
+  canonicalUrl    String?
+  noIndex         Boolean @default(false)
+  ogImageUrl      String?
+  schemaJson      Json?
 
-  articleId        String?  @unique
-  staticPageId     String?  @unique
+  articleId    String? @unique
+  staticPageId String? @unique
 
-  article          Article?    @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  staticPage       StaticPage? @relation(fields: [staticPageId], references: [id], onDelete: Cascade)
+  article    Article?    @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  staticPage StaticPage? @relation(fields: [staticPageId], references: [id], onDelete: Cascade)
 }
 
 model Redirect {
-  id          String   @id @default(cuid())
-  fromPath    String   @unique
-  toPath      String
-  statusCode  Int      @default(301)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  fromPath   String   @unique
+  toPath     String
+  statusCode Int      @default(301)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  userId      String?
-  action      String
-  entityType  String
-  entityId    String?
-  payload     Json?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  payload    Json?
+  createdAt  DateTime @default(now())
 
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId])
   @@index([createdAt])
 }
 
-model TopicQueue {
-  id               String      @id @default(cuid())
-  rawTitle         String
-  normalizedTitle  String
-  titleHash        String      @unique
-  status           TopicStatus @default(QUEUED)
-  dedupeScore      Float?
-  similarityGroup  String?
-  searchIntent     String?
-  outlineJson      Json?
-  keywords         String[]
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  processedAt      DateTime?
-  errorMessage     String?
+model GenerationJob {
+  id             String               @id @default(cuid())
+  title          String?
+  keyword        String
+  sourceType     GenerationSourceType
+  sourceUrl      String?
+  targetCountry  String
+  targetLanguage String
+  aiModelUsed    String
+  status         GenerationStatus     @default(DRAFT)
 
-  mainCategoryId   String?
-  subCategoryId    String?
-  mainCategory     Category?   @relation("TopicMainCategory", fields: [mainCategoryId], references: [id], onDelete: SetNull)
-  subCategory      Category?   @relation("TopicSubCategory", fields: [subCategoryId], references: [id], onDelete: SetNull)
-  article          Article?
-  pipelineEvents   PipelineEvent[]
+  // Output JSON fields
+  seoTitle           String?
+  metaDescription    String?
+  slug               String?
+  content            String? // Full article Markdown/HTML
+  faqs               Json?
+  internalLinks      Json?
+  schemaJson         Json?
+  geoAioNotes        Json?
+  competitorAnalysis Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  article Article?
 
   @@index([status, createdAt])
 }
 
-model ContentMemory {
-  id            String   @id @default(cuid())
-  articleId     String   @unique
-  title         String
-  slug          String   @unique
-  categoryPath  String
-  keywords      String[]
-  summary       String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  article       Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
-
-  @@index([categoryPath])
-}
-
-model PublishingJob {
-  id             String             @id @default(cuid())
-  runAt          DateTime
-  status         PublishingJobStatus @default(PENDING)
-  batchSize      Int                @default(10)
-  completedCount Int                @default(0)
-  logJson        Json?
-  errorMessage   String?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  events         PipelineEvent[]
-
-  @@index([status, runAt])
-}
-
-model GeneratedImagePrompt {
-  id             String   @id @default(cuid())
-  articleId      String   @unique
-  prompt         String
-  negativePrompt String?
-  createdAt      DateTime @default(now())
-
-  article        Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
-}
-
-model PipelineEvent {
-  id             String   @id @default(cuid())
-  runKey         String?
-  stage          String
-  status         String
-  message        String?
-  metaJson       Json?
-  topicId        String?
-  articleId      String?
-  publishingJobId String?
-  createdAt      DateTime @default(now())
-
-  topic          TopicQueue?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  article        Article?      @relation(fields: [articleId], references: [id], onDelete: SetNull)
-  publishingJob  PublishingJob? @relation(fields: [publishingJobId], references: [id], onDelete: SetNull)
-
-  @@index([createdAt])
-  @@index([topicId, createdAt])
-  @@index([articleId, createdAt])
-  @@index([runKey, createdAt])
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String // Keep encrypted if sensitive (like API keys)
+  description String?
+  updatedAt   DateTime @updatedAt
 }

@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 
 const adminLinks = [
   { href: "/admin", label: "لوحة المعلومات" },
@@ -6,6 +6,9 @@ const adminLinks = [
   { href: "/admin/articles", label: "المقالات" },
   { href: "/admin/static-pages", label: "الصفحات الثابتة" },
   { href: "/admin/trending", label: "الترند والأكثر رواجًا" },
+  { href: "/admin/generator", label: "توليد المقالات (AI)" },
+  { href: "/admin/waiting-for-publish", label: "بانتظار النشر" },
+  { href: "/admin/ai-settings", label: "إعدادات الذكاء الاصطناعي" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

@@ -1,4 +1,4 @@
-﻿# Arabic Knowledge Platform
+# Arabic Knowledge Platform
 
 منصة محتوى عربية ضخمة (RTL-first) مبنية بـ Next.js App Router ومصممة بمنهج SEO-first وقابلية توسع عالية، مع لوحة إدارة وقاعدة بيانات قابلة للتشغيل الإنتاجي.
 
@@ -113,80 +113,41 @@ npm run build
 - المشروع يستخدم fallback data من `reference-data/` عند غياب قاعدة البيانات، لضمان عمل القوالب مباشرة.
 - ملفات المرجع (`reference-data/*`) ناتجة من crawl داخلي وتُستخدم كبذرة تصنيفية فقط.
 
-# Content Production Engine
+# AI Article Generator System (SEO + GEO + AIO)
 
-## الهدف
-محرك إنتاج محتوى تلقائي ينفذ:
-1. Topic intake from `reference-data/`
-2. Cleaning + dedupe + anti-duplicate
-3. Auto classification (main/sub category)
-4. Stage 1 Analysis (keyword + intent + user problem)
-5. Stage 2 Outline (H2/H3 + FAQ + logical flow)
-6. Stage 3 Execution (1200+ words, practical examples)
-7. SEO optimization (slug/meta/canonical/LSI)
-8. Internal linking (2–5 links)
-9. Image prompt generation (async image pipeline)
-10. Async image generation via OpenAI image model
-11. Random author assignment from AI-generated pool (20+ authors)
-12. Scheduling (5/day, single cluster mode)
-13. Publishing + content memory update
+## Goal
+A comprehensive web app engine that generates, rewrites, reviews, and prepares articles before publishing. The system uses ChatGPT models and the DataForSEO API to analyze Google top results, generating completely original and highly optimized content.
 
-## أوامر التشغيل
-```bash
-# 1) إدخال المواضيع + تنظيف + كتابة Cluster واحد (1 رئيسي + 4 داعمة) + جدولة
-npm run pipeline:run
+## Main Features
 
-# 2) نشر المقالات المجدولة التي حان وقتها
-npm run pipeline:publish
+### 1. Article from Keyword
+Generates an SEO/GEO/AIO optimized article from a single keyword.
+- **Inputs:** Main keyword, Target country, Target language, Article type, Search intent, Preferred AI model.
+- **Process:**
+  - Fetches top 10 Google results via DataForSEO.
+  - Analyzes competitors (titles, meta, headings, word count, FAQs, content gaps).
+  - Generates a new, superior original article.
 
-# 3) معالجة الصور المعلقة بشكل غير متزامن
-npm run pipeline:images
+### 2. Rewrite from URL
+Rewrites an existing article to improve its SEO/GEO/AIO performance.
+- **Inputs:** Article URL, Target keyword, Target country, Target language, Preferred AI model.
+- **Process:**
+  - Extracts content from the URL.
+  - Fetches top 10 Google results via DataForSEO.
+  - Rewrites the article in a better, highly structured, SEO-safe version without plagiarizing.
 
-# 4) إنشاء مقالة واحدة يدويًا من عنوان
-npm run pipeline:article -- "فوائد تنظيم الوقت في بيئة العمل"
+### 3. Review Workflow (Waiting for Publish)
+Generated articles DO NOT publish automatically. All results appear in a "Waiting for Publish" dashboard.
+- **Dashboard Features:** Shows Article title, Keyword, Source type, Target country, Language, AI model used, and Status (Draft, Waiting for Review, Needs Modification, Approved, Published).
+- **Actions:** View, Edit, Regenerate specific sections, Approve, Publish, Delete.
 
-# 5) worker دوري (يمكن ربطه بـ Coolify cron)
-npm run pipeline:cron
+### 4. Advanced Settings
+Admins can securely configure:
+- OpenAI API Keys and DataForSEO Credentials.
+- Model selections (GPT-4o, GPT-4o-mini, o1-preview, etc.).
+- Default Target Country and Language.
 
-# 6) حذف كل المقالات/المواضيع التجريبية المولدة من الـpipeline
-npm run pipeline:reset
-```
-
-## جداول قاعدة البيانات المضافة
-- `TopicQueue`
-- `ContentMemory`
-- `PublishingJob`
-- `GeneratedImagePrompt`
-- `PipelineEvent` (تتبع مراحل التنفيذ لكل مقال)
-
-## لوحة الأدمن للأتمتة
-- صفحة المتابعة: `/admin/pipeline`
-- تعرض:
-- حالات المواضيع بالألوان (بانتظار/منشور/متجاوز...)
-- سجل مراحل التنفيذ لكل مقالة
-- آخر وظائف الجدولة والنشر
-- تشغيل يدوي: استيراد مواضيع `reference-data` + تشغيل Pipeline + نشر المستحق
-- إضافة موضوع جديد يدويًا للـQueue
-
-## بعد التحديث
-نفّذ مرة واحدة:
-```bash
-npx prisma db push
-```
-
-## Cron مقترح (Coolify)
-- `pipeline:run` مرة يوميًا (مثل 01:00)
-- `pipeline:publish` كل 15 دقيقة
-- `pipeline:images` كل 10-15 دقيقة
-
-## سياسة النشر الحالية
-- حد يومي ثابت: `5` مقالات فقط.
-- النمط: `Cluster Mode` فقط (موضوع محوري واحد + 4 مقالات داعمة).
-- عند فشل تكوين Cluster كامل: لا يتم النشر ولا الجدولة.
-
-## Model Selection
-- كتابة وتحليل وSEO: `OPENAI_MODEL=gpt-4o-mini`
-- توليد الصور (خارجي Async): `OPENAI_IMAGE_MODEL=gpt-image-1.5` (quality: low)
-
-## ملاحظة
-المواضيع المصدرية تُستخدم كأفكار فقط، والمحتوى الناتج يتم توليده أصليًا داخل المحرك.
+## Technical Requirements
+- **SEO:** SEO title (<60 chars), Meta description (<150 chars), Clean slug, H1/H2/H3 structure, Internal/External linking, FAQ section, Schema JSON-LD (Article, FAQ, Breadcrumb).
+- **GEO (Generative Engine Optimization):** Clear factual answers for AI quoting, entity-rich content, structured comparison sections.
+- **AIO (AI Overviews):** Answer queries early, FAQ-style short paragraphs, specific numbers/steps, comprehensive coverage of People Also Ask (PAA).
