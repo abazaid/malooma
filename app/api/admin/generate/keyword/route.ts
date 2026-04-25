@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const serp = await fetchSerpResults(keyword, country, language, settings);
 
     // 2. Build prompt
-    const prompt = buildArticlePrompt({ keyword, language, country, intent: searchIntent, articleType, serp });
+    const prompt = buildArticlePrompt({ keyword, language, country, intent: searchIntent, articleType, serp, modelInstructions: settings.model_instructions });
 
     // 3. Call OpenAI
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {

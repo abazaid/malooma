@@ -13,6 +13,7 @@ export default function AISettingsPage() {
     dataforseo_password: '',
     default_country:     'SA',
     default_language:    'ar',
+    model_instructions:  '',
   });
 
   useEffect(() => {
@@ -134,6 +135,22 @@ export default function AISettingsPage() {
               </select>
             </div>
           </div>
+        </section>
+
+        {/* Model Instructions */}
+        <section className="space-y-4 border border-slate-200 rounded-xl p-5">
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">📝 تعليمات النموذج (System Instructions)</h2>
+          <p className="text-xs text-slate-500">
+            هذه التعليمات تُرسل للنموذج مع كل طلب توليد مقال. استخدمها لتحديد أسلوب الكتابة، اللهجة، القواعد الخاصة بموقعك، إلخ.
+          </p>
+          <textarea
+            value={form.model_instructions}
+            onChange={e => set('model_instructions', e.target.value)}
+            rows={8}
+            placeholder={`مثال:\n- اكتب بأسلوب سهل وواضح مناسب لعامة الناس\n- استخدم اللغة العربية الفصحى المبسّطة\n- ابدأ كل مقال بسؤال يستفز فضول القارئ\n- لا تذكر أي منافسين أو مواقع أخرى بالاسم\n- اجعل كل فقرة لا تتجاوز 3-4 جمل`}
+            className="w-full border p-3 rounded text-sm font-mono leading-relaxed focus:ring-2 focus:ring-blue-200 outline-none resize-y min-h-[160px]"
+          />
+          <p className="text-xs text-slate-400">{form.model_instructions.length} حرف</p>
         </section>
 
         <button

@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       'dataforseo_password',
       'default_country',
       'default_language',
+      'model_instructions',
     ];
 
     for (const key of allowed) {

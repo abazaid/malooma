@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
       articleType: 'rewrite',
       serp,
       sourceContent,
+      modelInstructions: settings.model_instructions,
     });
 
     // 3. Call OpenAI

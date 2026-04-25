@@ -7,6 +7,7 @@ export interface Settings {
   dataforseo_password: string;
   default_country: string;
   default_language: string;
+  model_instructions: string;
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -20,6 +21,7 @@ export async function getSettings(): Promise<Settings> {
     dataforseo_password: map.dataforseo_password || '',
     default_country:     map.default_country     || 'SA',
     default_language:    map.default_language    || 'ar',
+    model_instructions:  map.model_instructions  || '',
   };
 }
 
@@ -98,6 +100,7 @@ export function buildArticlePrompt(opts: {
   articleType: string;
   serp: { title: string; url: string; description: string }[];
   sourceContent?: string;
+  modelInstructions?: string;
 }): string {
   const serpSummary = opts.serp.length
     ? opts.serp.map((r, i) => `${i + 1}. ${r.title} — ${r.description}`).join('\n')
@@ -107,12 +110,16 @@ export function buildArticlePrompt(opts: {
     ? `\nORIGINAL ARTICLE TO REWRITE:\n${opts.sourceContent}\n`
     : '';
 
+  const customInstructions = opts.modelInstructions?.trim()
+    ? `\nCUSTOM INSTRUCTIONS (must follow strictly):\n${opts.modelInstructions}\n`
+    : '';
+
   return `You are a professional SEO & GEO content writer. Write a complete article in ${opts.language === 'ar' ? 'Arabic' : 'English'} for the target country ${opts.country}.
 
 MAIN KEYWORD: "${opts.keyword}"
 SEARCH INTENT: ${opts.intent}
 ARTICLE TYPE: ${opts.articleType}
-${sourceSection}
+${sourceSection}${customInstructions}
 TOP 10 GOOGLE COMPETITORS (for research only, DO NOT copy):
 ${serpSummary}
 
